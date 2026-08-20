@@ -1,0 +1,23 @@
+{
+  "name": "Rotina — agenda e assistente do dia",
+  "short_name": "Rotina",
+  "description": "Assistente pessoal de rotina: remédios, água, academia, estudos e compromissos.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1115",
+  "theme_color": "#0f1115",
+  "lang": "pt-BR",
+  "categories": ["productivity", "health", "lifestyle"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Chat", "url": "./index.html#chat" },
+    { "name": "Treino de hoje", "url": "./index.html#treino" },
+    { "name": "Estudar agora", "url": "./index.html#estudos" }
+  ]
+}

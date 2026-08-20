@@ -1,0 +1,1269 @@
+/* ============================================================
+   app.js — interface, chat e regras do dia a dia
+   ============================================================ */
+(function () {
+  'use strict';
+
+  var S = window.RotinaStore;
+  var N = window.RotinaNotify;
+  var NLP = window.RotinaNLP;
+
+  var st = null;
+  var swReg = null;
+  var vista = 'hoje';
+  var diaCorrente = S.hoje();
+
+  /* ---------------- utilidades ---------------- */
+  function $(s, r) { return (r || document).querySelector(s); }
+  function $$(s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); }
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function hora(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function nomeDia(d) { return NLP.NOMES_DIA[d.getDay()]; }
+  function dataCurta(d) { return pad(d.getDate()) + '/' + pad(d.getMonth() + 1); }
+  function hojeD() { var d = new Date(); d.setHours(12, 0, 0, 0); return d; }
+
+  var salvarTimer = null;
+  function salvar(reRender) {
+    clearTimeout(salvarTimer);
+    salvarTimer = setTimeout(function () { S.salvar(st); }, 250);
+    if (reRender !== false) render();
+  }
+
+  function reg(data) { return S.registroDe(st, data || S.hoje()); }
+
+  var brindeTimer = null;
+  function brinde(msg) {
+    var el = $('#brinde');
+    el.textContent = msg;
+    el.classList.add('on');
+    clearTimeout(brindeTimer);
+    brindeTimer = setTimeout(function () { el.classList.remove('on'); }, 2200);
+  }
+
+  function abrirModal(html) {
+    $('#modal-conteudo').innerHTML = html;
+    $('#modal').classList.add('aberto');
+    document.body.style.overflow = 'hidden';
+  }
+  function fecharModal() {
+    $('#modal').classList.remove('aberto');
+    document.body.style.overflow = '';
+  }
+
+  function diasLabel(dias) {
+    if (!dias || !dias.length) return 'nenhum dia';
+    if (dias.length === 7) return 'todos os dias';
+    var s = dias.slice().sort().join(',');
+    if (s === '1,2,3,4,5') return 'dias úteis';
+    if (s === '0,6') return 'fim de semana';
+    return dias.slice().sort().map(function (d) { return NLP.NOMES_DIA_CURTO[d]; }).join(', ');
+  }
+
+  function recorrenciaLabel(rec) {
+    if (!rec) return '';
+    if (rec.tipo === 'diaria') return 'todo dia';
+    var ds = (rec.dias || []).slice().sort();
+    if (ds.length === 7) return 'todo dia';
+    var s = ds.join(',');
+    if (s === '1,2,3,4,5') return 'dias úteis';
+    if (s === '0,6') return 'fim de semana';
+    if (ds.length === 1) return (ds[0] === 0 || ds[0] === 6 ? 'todo ' : 'toda ') + NLP.NOMES_DIA[ds[0]];
+    return 'toda ' + ds.map(function (d) { return NLP.NOMES_DIA_CURTO[d]; }).join(', ');
+  }
+
+  function plural(n, um, muitos) { return n + ' ' + (n === 1 ? um : muitos); }
+
+  function seletorDias(dias, id) {
+    return '<div class="dias-semana" id="' + id + '">' + NLP.NOMES_DIA_CURTO.map(function (n, i) {
+      return '<button type="button" data-dia="' + i + '" class="' + (dias.indexOf(i) !== -1 ? 'on' : '') + '">' + n + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function lerDias(id) {
+    return $$('#' + id + ' button.on').map(function (b) { return +b.dataset.dia; });
+  }
+
+  /* ---------------- score do dia ---------------- */
+  function scoreDia() {
+    var d = hojeD(), r = reg(), total = 0, feito = 0;
+    st.habitos.forEach(function (h) {
+      if (!h.ativo || (h.dias || []).indexOf(d.getDay()) === -1) return;
+      total++;
+      if (r.habitos[h.id]) feito++;
+    });
+    if (st.config.metaAgua > 0) { total++; feito += Math.min(1, (r.agua || 0) / st.config.metaAgua); }
+    if (st.config.metaEstudoMin > 0) { total++; feito += Math.min(1, (r.estudoMin || 0) / st.config.metaEstudoMin); }
+    var divs = N.treinoDoDia(st, d);
+    if (divs) { total++; if (r.treinos.length) feito++; }
+    N.eventosDoDia(st, d).forEach(function (o) {
+      total++;
+      if (r.eventosFeitos.indexOf(o.ev.id) !== -1) feito++;
+    });
+    if (!total) return 0;
+    return Math.round((feito / total) * 100);
+  }
+
+  // Conta dias consecutivos cumpridos. Se hoje ainda não foi cumprido,
+  // a sequência não quebra — começa a contagem por ontem.
+  function sequencia(fn) {
+    var n = 0, d = hojeD();
+    if (!fn(st.registros[S.iso(d)], d)) d.setDate(d.getDate() - 1);
+    for (var i = 0; i < 400; i++) {
+      if (!fn(st.registros[S.iso(d)], d)) break;
+      n++;
+      d.setDate(d.getDate() - 1);
+    }
+    return n;
+  }
+
+  /* ---------------- cabeçalho ---------------- */
+  var TITULOS = { hoje: 'Hoje', chat: 'Chat', treino: 'Treino', estudos: 'Estudos', agenda: 'Agenda' };
+  function renderTopo() {
+    $('#titulo-topo').textContent = TITULOS[vista] || 'Rotina';
+    var d = new Date();
+    $('#sub-topo').textContent = nomeDia(d).charAt(0).toUpperCase() + nomeDia(d).slice(1) + ', ' + d.getDate() + ' de ' +
+      ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'][d.getMonth()];
+  }
+
+  /* ---------------- vista: HOJE ---------------- */
+  function renderHoje() {
+    var d = hojeD(), r = reg();
+
+    var h = new Date().getHours();
+    var sauda = h < 5 ? 'Boa madrugada' : h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite';
+    $('#saudacao').textContent = sauda + (st.perfil.nome ? ', ' + st.perfil.nome : '');
+
+    var s = scoreDia();
+    var circ = 2 * Math.PI * 29;
+    $('#anel-prog').setAttribute('stroke-dasharray', circ.toFixed(1));
+    $('#anel-prog').setAttribute('stroke-dashoffset', (circ * (1 - s / 100)).toFixed(1));
+    $('#anel-valor').textContent = s + '%';
+
+    var pend = [];
+    st.habitos.forEach(function (hb) {
+      if (hb.ativo && (hb.dias || []).indexOf(d.getDay()) !== -1 && !r.habitos[hb.id]) pend.push(hb.nome);
+    });
+    var divs = N.treinoDoDia(st, d);
+    if (divs && !r.treinos.length) pend.push('treino ' + divs[0].nome);
+    if ((r.estudoMin || 0) < st.config.metaEstudoMin) pend.push('estudo');
+    $('#resumo-dia').textContent = pend.length
+      ? 'Falta: ' + pend.slice(0, 3).join(', ') + (pend.length > 3 ? ' e mais ' + (pend.length - 3) : '')
+      : 'Tudo em dia por aqui. 👏';
+
+    // água
+    var meta = st.config.metaAgua;
+    $('#agua-n').textContent = (r.agua || 0) + ' ml';
+    $('#agua-d').textContent = 'de ' + meta + ' ml';
+    $('#agua-barra').style.width = Math.min(100, ((r.agua || 0) / meta) * 100) + '%';
+    var copo = st.config.copoPadrao;
+    $('#agua-chips').innerHTML =
+      '<button class="chip forte" data-agua="' + copo + '">+ copo (' + copo + ' ml)</button>' +
+      '<button class="chip" data-agua="500">+500 ml</button>' +
+      '<button class="chip" data-agua="' + (-copo) + '">−</button>';
+
+    // hábitos
+    var lista = st.habitos.filter(function (hb) {
+      return hb.ativo && (hb.dias || []).indexOf(d.getDay()) !== -1;
+    });
+    $('#lista-habitos').innerHTML = lista.length ? lista.map(function (hb) {
+      var on = !!r.habitos[hb.id];
+      var seq = sequencia(function (rr) { return rr && rr.habitos && rr.habitos[hb.id]; });
+      return '<div class="item ' + (on ? 'feito' : '') + '" data-habito="' + hb.id + '">' +
+        '<span class="emoji">' + esc(hb.emoji || '✅') + '</span>' +
+        '<div class="info"><div class="nome">' + esc(hb.nome) + '</div>' +
+        '<div class="meta">' + esc(hb.horario) +
+        (hb.tipo === 'quantidade' && hb.meta ? ' · ' + hb.meta + (hb.unidade || '') : '') +
+        (seq > 1 ? ' · <span class="streak">🔥 ' + seq + ' dias</span>' : '') + '</div></div>' +
+        '<button class="marcar ' + (on ? 'on' : '') + '" data-toggle="' + hb.id + '">✓</button>' +
+        '</div>';
+    }).join('') : '<p class="vazio">Nenhum hábito para hoje.</p>';
+
+    // treino
+    var alvo = $('#treino-hoje');
+    if (!divs) {
+      alvo.innerHTML = '<p class="vazio">Dia de descanso. 😌</p>';
+    } else {
+      var dv = divs[0];
+      var jaFez = r.treinos.length > 0;
+      alvo.innerHTML =
+        '<div class="divisao-cab"><span class="tag hoje">TREINO ' + esc(dv.nome) + '</span>' +
+        '<strong style="font-size:15px">' + esc(dv.foco) + '</strong></div>' +
+        '<p class="mini" style="margin:2px 0 12px">' + dv.exercicios.length + ' exercícios · ' +
+        esc(dv.horario || st.treino.horario) + '</p>' +
+        (jaFez
+          ? '<p class="mini" style="color:var(--accent)">✅ Treino registrado hoje às ' + esc(r.treinos[0].hora) + '</p>'
+          : '<button class="btn" data-registrar="' + dv.id + '">Registrar treino</button>');
+    }
+
+    // estudo
+    var em = r.estudoMin || 0, me = st.config.metaEstudoMin;
+    $('#estudo-n').textContent = em + ' min';
+    $('#estudo-d').textContent = 'de ' + me + ' min';
+    $('#estudo-barra').style.width = Math.min(100, me ? (em / me) * 100 : 0) + '%';
+
+    // próximos
+    var prox = [];
+    for (var i = 0; i < 14 && prox.length < 5; i++) {
+      var dia = new Date(d.getTime()); dia.setDate(dia.getDate() + i);
+      N.eventosDoDia(st, dia).forEach(function (o) {
+        if (prox.length >= 5) return;
+        if (i === 0 && o.quando < new Date()) return;
+        prox.push({ o: o, dia: dia });
+      });
+    }
+    $('#proximos').innerHTML = prox.length ? prox.map(function (p) {
+      var quando = p.dia.toDateString() === d.toDateString() ? 'hoje'
+        : (p.dia - d) / 86400000 < 2 ? 'amanhã' : nomeDia(p.dia) + ' ' + dataCurta(p.dia);
+      return '<div class="item"><span class="emoji">' + (p.o.ev.subtipo === 'lembrete' ? '🔔' : '📅') + '</span>' +
+        '<div class="info"><div class="nome">' + esc(p.o.ev.titulo) + '</div>' +
+        '<div class="meta">' + quando + ' às ' + hora(p.o.quando) + '</div></div></div>';
+    }).join('') : '<p class="vazio">Nada agendado nos próximos dias.</p>';
+
+    // aviso de notificações
+    var av = $('#aviso-notif');
+    if (!('Notification' in window)) {
+      av.innerHTML = '';
+    } else if (Notification.permission !== 'granted' || !st.config.notificacoes) {
+      av.innerHTML = '<div class="aviso"><span>🔔</span><div style="flex:1">Ative as notificações para receber os lembretes de remédio, água e treino.</div>' +
+        '<button id="btn-ativar-notif">Ativar</button></div>';
+    } else {
+      av.innerHTML = '';
+    }
+  }
+
+  /* ---------------- vista: TREINO ---------------- */
+  function renderTreino() {
+    var hojeDow = new Date().getDay();
+    var r = reg();
+    $('#treino-conteudo').innerHTML = st.treino.divisao.map(function (dv) {
+      var ehHoje = (dv.dias || []).indexOf(hojeDow) !== -1;
+      return '<div class="cartao">' +
+        '<div class="divisao-cab">' +
+        '<span class="tag ' + (ehHoje ? 'hoje' : '') + '">' + esc(dv.nome) + '</span>' +
+        '<strong style="flex:1;font-size:15px">' + esc(dv.foco) + '</strong>' +
+        '<button class="icone-btn" data-editar-div="' + dv.id + '" style="width:32px;height:32px;font-size:14px">✏️</button>' +
+        '</div>' +
+        '<p class="mini" style="margin:0 0 10px">' + diasLabel(dv.dias) + ' · ' + esc(dv.horario || st.treino.horario) + '</p>' +
+        dv.exercicios.map(function (ex) {
+          return '<div class="exercicio"><span class="nome">' + esc(ex.nome) + '</span>' +
+            '<span class="num">' + ex.series + '×' + esc(ex.reps) + (ex.carga ? ' · ' + esc(ex.carga) : '') + '</span></div>';
+        }).join('') +
+        '<div style="height:12px"></div>' +
+        '<button class="btn ' + (ehHoje ? '' : 'sec') + '" data-registrar="' + dv.id + '">' +
+        (ehHoje && r.treinos.length ? 'Registrar de novo' : 'Registrar treino ' + esc(dv.nome)) + '</button>' +
+        '</div>';
+    }).join('');
+
+    // histórico
+    var out = [];
+    for (var i = 13; i >= 0; i--) {
+      var d = hojeD(); d.setDate(d.getDate() - i);
+      var rr = st.registros[S.iso(d)];
+      var fez = rr && rr.treinos && rr.treinos.length;
+      var previsto = N.treinoDoDia(st, d);
+      out.push('<div class="col" title="' + dataCurta(d) + ' — ' + (fez ? 'treinou' : previsto ? 'estava previsto' : 'descanso') + '">' +
+        '<div class="haste ' + (fez ? 'ok' : '') + '" style="height:' + (fez ? 100 : previsto ? 26 : 10) + '%"></div>' +
+        '<div class="rot">' + d.getDate() + '</div></div>');
+    }
+    var seqT = sequencia(function (rr, d) {
+      var prev = N.treinoDoDia(st, d);
+      if (!prev) return true;
+      return rr && rr.treinos && rr.treinos.length > 0;
+    });
+    $('#treino-historico').innerHTML = '<div class="semana">' + out.join('') + '</div>' +
+      '<p class="mini centro">' + plural(contarTreinos(14), 'treino', 'treinos') + ' nos últimos 14 dias' +
+      (seqT > 1 ? ' · <span class="streak">🔥 ' + seqT + ' dias sem furar</span>' : '') + '</p>';
+  }
+
+  function contarTreinos(dias) {
+    var n = 0;
+    for (var i = 0; i < dias; i++) {
+      var d = hojeD(); d.setDate(d.getDate() - i);
+      var rr = st.registros[S.iso(d)];
+      if (rr && rr.treinos && rr.treinos.length) n += rr.treinos.length;
+    }
+    return n;
+  }
+
+  /* ---------------- vista: ESTUDOS ---------------- */
+  function renderEstudos() {
+    var r = reg(), me = st.config.metaEstudoMin;
+    $('#estudo-n2').textContent = (r.estudoMin || 0) + ' min';
+    $('#estudo-d2').textContent = 'de ' + me + ' min';
+    $('#estudo-barra2').style.width = Math.min(100, me ? ((r.estudoMin || 0) / me) * 100 : 0) + '%';
+
+    var cols = [], soma = 0;
+    for (var i = 6; i >= 0; i--) {
+      var d = hojeD(); d.setDate(d.getDate() - i);
+      var rr = st.registros[S.iso(d)];
+      var min = (rr && rr.estudoMin) || 0;
+      soma += min;
+      var pct = me ? Math.min(100, (min / me) * 100) : (min ? 100 : 0);
+      cols.push('<div class="col" title="' + dataCurta(d) + ': ' + min + ' min">' +
+        '<div class="haste ' + (min >= me && me ? 'ok' : '') + '" style="height:' + Math.max(4, pct) + '%"></div>' +
+        '<div class="rot">' + NLP.NOMES_DIA_CURTO[d.getDay()] + '</div></div>');
+    }
+    $('#estudo-semana').innerHTML = cols.join('');
+    $('#estudo-media').textContent = 'Média de ' + Math.round(soma / 7) + ' min/dia · ' + Math.round(soma / 60 * 10) / 10 + ' h na semana';
+    var seq = sequencia(function (rr) { return rr && (rr.estudoMin || 0) >= me; });
+    $('#estudo-streak').textContent = seq > 1 ? '🔥 ' + seq + ' dias' : '';
+  }
+
+  /* ---------------- vista: AGENDA ---------------- */
+  function renderAgenda() {
+    var d0 = hojeD(), html = '', achou = false;
+    for (var i = 0; i < 35; i++) {
+      var dia = new Date(d0.getTime()); dia.setDate(dia.getDate() + i);
+      var evs = N.eventosDoDia(st, dia);
+      if (!evs.length) continue;
+      achou = true;
+      var rot = i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : nomeDia(dia) + ', ' + dataCurta(dia);
+      html += '<div class="dia-cab">' + rot + '</div>';
+      var rr = st.registros[S.iso(dia)];
+      evs.forEach(function (o) {
+        var feito = rr && rr.eventosFeitos && rr.eventosFeitos.indexOf(o.ev.id) !== -1;
+        var passou = o.quando < new Date();
+        html += '<div class="evento ' + (feito || passou ? 'passado' : '') + '" data-evento="' + o.ev.id + '" data-dia="' + S.iso(dia) + '">' +
+          '<div class="hora">' + hora(o.quando) + '</div>' +
+          '<div class="corpo"><div class="t">' + esc(o.ev.titulo) + '</div>' +
+          '<div class="d">' +
+          (o.ev.recorrencia ? '🔁 ' + recorrenciaLabel(o.ev.recorrencia) + ' · ' : '') +
+          (o.ev.duracaoMin ? o.ev.duracaoMin + ' min · ' : '') +
+          'alerta ' + (typeof o.ev.alertaMin === 'number' ? o.ev.alertaMin : st.config.alertaEventoMin) + ' min antes' +
+          (o.ev.notas ? '<br>' + esc(o.ev.notas) : '') +
+          '</div></div>' +
+          '<button class="marcar ' + (feito ? 'on' : '') + '" data-concluir="' + o.ev.id + '" data-d="' + S.iso(dia) + '">✓</button>' +
+          '</div>';
+      });
+    }
+    $('#lista-agenda').innerHTML = achou ? html : '<p class="vazio">Nenhum compromisso nos próximos 60 dias.<br>Use o chat: "consulta no dentista quinta 15h".</p>';
+  }
+
+  /* ---------------- render geral ---------------- */
+  function render() {
+    renderTopo();
+    renderHoje();
+    renderTreino();
+    renderEstudos();
+    renderAgenda();
+  }
+
+  /* ---------------- ações ---------------- */
+  function addAgua(ml) {
+    var r = reg();
+    r.agua = Math.max(0, (r.agua || 0) + ml);
+    salvar();
+    return r.agua;
+  }
+
+  function toggleHabito(id, valor) {
+    var r = reg(), hb = st.habitos.filter(function (h) { return h.id === id; })[0];
+    if (!hb) return null;
+    if (typeof valor === 'undefined') valor = !r.habitos[id];
+    if (!valor) delete r.habitos[id]; else r.habitos[id] = valor;
+    salvar();
+    return { habito: hb, on: !!r.habitos[id] };
+  }
+
+  function addEstudo(min, data) {
+    var r = reg(data);
+    r.estudoMin = Math.max(0, (r.estudoMin || 0) + min);
+    salvar();
+    return r.estudoMin;
+  }
+
+  function registrarTreino(divisaoId, cargas, data) {
+    var dv = st.treino.divisao.filter(function (d) { return d.id === divisaoId; })[0];
+    var r = reg(data);
+    var exs = dv ? dv.exercicios.map(function (ex) {
+      var c = cargas && cargas[ex.id] !== undefined ? cargas[ex.id] : ex.carga;
+      if (c) ex.carga = c;
+      return { nome: ex.nome, series: ex.series, reps: ex.reps, carga: c || '' };
+    }) : [];
+    r.treinos.push({
+      divisaoId: divisaoId,
+      nome: dv ? dv.nome : '?',
+      foco: dv ? dv.foco : '',
+      hora: hora(new Date()),
+      exercicios: exs
+    });
+    salvar();
+    return dv;
+  }
+
+  function criarEvento(dados) {
+    var ev = {
+      id: S.uid(),
+      titulo: dados.titulo,
+      subtipo: dados.subtipo || 'evento',
+      inicio: dados.inicio.toISOString(),
+      duracaoMin: dados.duracaoMin || 0,
+      recorrencia: dados.recorrencia || null,
+      alertaMin: typeof dados.alertaMin === 'number' ? dados.alertaMin : st.config.alertaEventoMin,
+      notas: dados.notas || '',
+      criadoEm: new Date().toISOString()
+    };
+    st.eventos.push(ev);
+    salvar();
+    return ev;
+  }
+
+  /* ---------------- CHAT ---------------- */
+  function addMsg(autor, texto, semSalvar) {
+    var m = { autor: autor, texto: texto, ts: Date.now() };
+    if (!semSalvar) {
+      st.chat.push(m);
+      if (st.chat.length > 80) st.chat = st.chat.slice(-80);
+      salvar(false);
+    }
+    renderChat();
+  }
+
+  function renderChat() {
+    var c = $('#mensagens');
+    c.innerHTML = st.chat.map(function (m) {
+      return '<div class="msg ' + m.autor + '">' + esc(m.texto).replace(/\n/g, '<br>') + '</div>';
+    }).join('');
+    c.scrollIntoView(false);
+    window.scrollTo(0, document.body.scrollHeight);
+  }
+
+  var SUGESTOES = [
+    'o que tenho hoje?',
+    'bebi 500ml',
+    'tomei os remédios',
+    'estudei 1h30',
+    'treinei peito e ombro',
+    'consulta no dentista quinta 15h',
+    'inglês toda terça às 20h',
+    'o que ainda falta hoje'
+  ];
+
+  function renderSugestoes() {
+    $('#sugestoes').innerHTML = SUGESTOES.map(function (s) {
+      return '<button class="chip" data-sug="' + esc(s) + '">' + esc(s) + '</button>';
+    }).join('');
+  }
+
+  function processar(texto) {
+    addMsg('user', texto);
+    var acao = NLP.interpretar(texto, {
+      agora: new Date(),
+      habitos: st.habitos,
+      divisao: st.treino.divisao,
+      copoPadrao: st.config.copoPadrao
+    });
+    var resposta = executar(acao, texto);
+    setTimeout(function () { addMsg('bot', resposta); }, 120);
+  }
+
+  function executar(a, textoOriginal) {
+    var r = reg();
+    switch (a.tipo) {
+      case 'ajuda':
+        return 'Escreve em português normal que eu anoto. Alguns exemplos:\n\n' +
+          '💧 "bebi 500ml" · "tomei 2 copos de água"\n' +
+          '💊 "tomei os remédios" · "tomei 5g de creatina"\n' +
+          '📚 "estudei 1h30"\n' +
+          '🏋️ "treinei peito ombro e tríceps"\n' +
+          '📅 "consulta no dentista quinta 15h"\n' +
+          '🔁 "inglês toda terça às 20h" · "academia dias úteis 19h"\n' +
+          '❓ "o que tenho hoje?" · "o que ainda falta"\n' +
+          '➕ "novo hábito tomar ômega 3 às 12h todo dia"';
+
+      case 'agua': {
+        var total = addAgua(a.ml);
+        var falta = st.config.metaAgua - total;
+        return '💧 +' + a.ml + ' ml anotado. Você está em ' + total + ' ml' +
+          (falta > 0 ? ' — faltam ' + falta + ' ml pra meta.' : ' — meta batida! 🎉');
+      }
+
+      case 'habito': {
+        var res = toggleHabito(a.habito.id, a.desmarcar ? false : a.valor);
+        if (!res) return 'Não achei esse hábito.';
+        if (!res.on) return 'Ok, desmarquei "' + res.habito.nome + '".';
+        var seq = sequencia(function (rr) { return rr && rr.habitos && rr.habitos[a.habito.id]; });
+        return (res.habito.emoji || '✅') + ' "' + res.habito.nome + '" marcado' +
+          (typeof a.valor === 'number' ? ' (' + a.valor + (res.habito.unidade || '') + ')' : '') + '.' +
+          (seq > 1 ? '\n🔥 ' + seq + ' dias seguidos.' : '');
+      }
+
+      case 'estudo': {
+        if (a.perguntar) return 'Boa! Quanto tempo? Ex.: "estudei 45 min" ou "estudei 1h30".';
+        var dataE = a.data ? S.iso(a.data) : S.hoje();
+        var tot = addEstudo(a.minutos, dataE);
+        var faltaE = st.config.metaEstudoMin - tot;
+        return '📚 +' + a.minutos + ' min. Total do dia: ' + tot + ' min' +
+          (faltaE > 0 ? ' — faltam ' + faltaE + ' min pra meta.' : ' — meta batida! 🎉');
+      }
+
+      case 'pomodoro':
+        irPara('estudos');
+        return '⏱️ Abri o timer pra você. É só apertar iniciar.';
+
+      case 'treino': {
+        var dv = a.divisao;
+        if (!dv) {
+          var previstos = N.treinoDoDia(st, a.data || new Date());
+          dv = previstos ? previstos[0] : st.treino.divisao[0];
+        }
+        if (!dv) return 'Você ainda não tem nenhuma divisão de treino cadastrada.';
+        registrarTreino(dv.id, null, a.data ? S.iso(a.data) : S.hoje());
+        return '🏋️ Treino ' + dv.nome + ' (' + dv.foco + ') registrado. Mandou bem.';
+      }
+
+      case 'novoHabito': {
+        var novo = {
+          id: S.uid(), nome: a.nome, emoji: '✅', tipo: 'check',
+          horario: a.horario, dias: a.dias, lembrete: true, ativo: true
+        };
+        st.habitos.push(novo);
+        salvar();
+        return '✅ Hábito "' + novo.nome + '" criado — ' + diasLabel(novo.dias) + ' às ' + novo.horario + '.';
+      }
+
+      case 'config':
+        if (a.campo === 'metaAgua') {
+          st.config.metaAgua = a.valor;
+          salvar();
+          return '💧 Meta de água ajustada para ' + a.valor + ' ml por dia.';
+        }
+        return 'Ok.';
+
+      case 'evento': {
+        var ev = criarEvento(a);
+        var q = new Date(ev.inicio);
+        var quandoTxt = ev.recorrencia
+          ? recorrenciaLabel(ev.recorrencia) + ' às ' + hora(q)
+          : nomeDia(q) + ', ' + dataCurta(q) + ' às ' + hora(q);
+        return (ev.subtipo === 'lembrete' ? '🔔' : '📅') + ' Anotado: "' + ev.titulo + '" — ' + quandoTxt + '.' +
+          '\nVou te avisar ' + ev.alertaMin + ' min antes.';
+      }
+
+      case 'consulta':
+        return resumo(a.escopo);
+
+      case 'vazio':
+        return 'Manda aí.';
+
+      default:
+        return 'Não peguei essa. 🤔\nTenta algo como "bebi 500ml", "estudei 1h", "treinei costas" ou "dentista sexta 14h".\nEscreve "ajuda" pra ver tudo que eu entendo.';
+    }
+  }
+
+  function resumo(escopo) {
+    var d = hojeD(), r = reg();
+
+    if (escopo === 'treino') {
+      var divs = N.treinoDoDia(st, d);
+      if (!divs) return '😌 Hoje é descanso — nenhum treino programado.';
+      var dv = divs[0];
+      return '🏋️ Hoje é o treino ' + dv.nome + ': ' + dv.foco + '.\n' +
+        dv.exercicios.map(function (e) { return '• ' + e.nome + ' — ' + e.series + '×' + e.reps + (e.carga ? ' (' + e.carga + ')' : ''); }).join('\n') +
+        (r.treinos.length ? '\n\n✅ Já registrado hoje.' : '\n\nAinda não registrei nada hoje.');
+    }
+
+    if (escopo === 'stats') {
+      var seqA = sequencia(function (rr) { return rr && (rr.agua || 0) >= st.config.metaAgua; });
+      var seqE = sequencia(function (rr) { return rr && (rr.estudoMin || 0) >= st.config.metaEstudoMin; });
+      return '📊 Como você está:\n' +
+        '• Score de hoje: ' + scoreDia() + '%\n' +
+        '• Água: ' + (r.agua || 0) + '/' + st.config.metaAgua + ' ml' + (seqA > 1 ? ' · 🔥 ' + seqA + ' dias' : '') + '\n' +
+        '• Estudo: ' + (r.estudoMin || 0) + '/' + st.config.metaEstudoMin + ' min' + (seqE > 1 ? ' · 🔥 ' + seqE + ' dias' : '') + '\n' +
+        '• Treinos nos últimos 14 dias: ' + contarTreinos(14);
+    }
+
+    if (escopo === 'pendente') {
+      var falta = [];
+      st.habitos.forEach(function (hb) {
+        if (hb.ativo && (hb.dias || []).indexOf(d.getDay()) !== -1 && !r.habitos[hb.id]) {
+          falta.push((hb.emoji || '✅') + ' ' + hb.nome + ' (' + hb.horario + ')');
+        }
+      });
+      if ((r.agua || 0) < st.config.metaAgua) falta.push('💧 Água — faltam ' + (st.config.metaAgua - (r.agua || 0)) + ' ml');
+      if ((r.estudoMin || 0) < st.config.metaEstudoMin) falta.push('📚 Estudo — faltam ' + (st.config.metaEstudoMin - (r.estudoMin || 0)) + ' min');
+      var dvs = N.treinoDoDia(st, d);
+      if (dvs && !r.treinos.length) falta.push('🏋️ Treino ' + dvs[0].nome + ' — ' + dvs[0].foco);
+      N.eventosDoDia(st, d).forEach(function (o) {
+        if (r.eventosFeitos.indexOf(o.ev.id) === -1 && o.quando > new Date()) {
+          falta.push('📅 ' + o.ev.titulo + ' às ' + hora(o.quando));
+        }
+      });
+      return falta.length ? 'Ainda falta:\n' + falta.map(function (x) { return '• ' + x; }).join('\n')
+        : '🎉 Nada pendente. Dia limpo!';
+    }
+
+    var dia = escopo === 'amanha' ? new Date(d.getTime() + 86400000) : d;
+    if (escopo === 'semana') {
+      var linhas = [];
+      for (var i = 0; i < 7; i++) {
+        var dd = new Date(d.getTime()); dd.setDate(dd.getDate() + i);
+        var evs = N.eventosDoDia(st, dd);
+        var tr = N.treinoDoDia(st, dd);
+        var partes = [];
+        if (tr) partes.push('🏋️ ' + tr[0].nome);
+        evs.forEach(function (o) { partes.push(hora(o.quando) + ' ' + o.ev.titulo); });
+        linhas.push((i === 0 ? 'Hoje' : nomeDia(dd)) + ': ' + (partes.length ? partes.join(' · ') : '—'));
+      }
+      return '🗓️ Sua semana:\n' + linhas.join('\n');
+    }
+
+    var rr2 = escopo === 'amanha' ? (st.registros[S.iso(dia)] || { habitos: {}, agua: 0, estudoMin: 0, treinos: [] }) : r;
+    var out = [escopo === 'amanha' ? '🗓️ Amanhã (' + nomeDia(dia) + '):' : '🗓️ Hoje (' + nomeDia(dia) + '):'];
+    var hs = st.habitos.filter(function (hb) { return hb.ativo && (hb.dias || []).indexOf(dia.getDay()) !== -1; });
+    if (hs.length) {
+      out.push('\nRotina:');
+      hs.forEach(function (hb) {
+        out.push('• ' + (rr2.habitos && rr2.habitos[hb.id] ? '✅' : '⬜') + ' ' + hb.nome + ' — ' + hb.horario);
+      });
+    }
+    var tr2 = N.treinoDoDia(st, dia);
+    out.push('\nTreino: ' + (tr2 ? tr2[0].nome + ' — ' + tr2[0].foco + (rr2.treinos && rr2.treinos.length ? ' ✅' : '') : 'descanso 😌'));
+    out.push('Estudo: ' + (rr2.estudoMin || 0) + '/' + st.config.metaEstudoMin + ' min');
+    if (escopo !== 'amanha') out.push('Água: ' + (r.agua || 0) + '/' + st.config.metaAgua + ' ml');
+    var evs2 = N.eventosDoDia(st, dia);
+    out.push('\nCompromissos:');
+    if (evs2.length) evs2.forEach(function (o) { out.push('• ' + hora(o.quando) + ' — ' + o.ev.titulo); });
+    else out.push('• nenhum');
+    return out.join('\n');
+  }
+
+  /* ---------------- modais ---------------- */
+  function modalHabito(id) {
+    var hb = id ? st.habitos.filter(function (h) { return h.id === id; })[0] : null;
+    var novo = !hb;
+    hb = hb || { id: S.uid(), nome: '', emoji: '💊', tipo: 'check', meta: '', unidade: '', horario: '08:00', dias: [0,1,2,3,4,5,6], lembrete: true, ativo: true };
+    abrirModal(
+      '<h3>' + (novo ? 'Novo hábito' : 'Editar hábito') + '</h3>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Emoji</span><input type="text" id="f-emoji" maxlength="2" value="' + esc(hb.emoji) + '"></label>' +
+        '<label class="campo"><span>Horário</span><input type="time" id="f-hora" value="' + esc(hb.horario) + '"></label>' +
+      '</div>' +
+      '<label class="campo"><span>Nome</span><input type="text" id="f-nome" placeholder="Ex.: Remédios da manhã" value="' + esc(hb.nome) + '"></label>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Tipo</span><select id="f-tipo">' +
+          '<option value="check"' + (hb.tipo === 'check' ? ' selected' : '') + '>Marcar feito</option>' +
+          '<option value="quantidade"' + (hb.tipo === 'quantidade' ? ' selected' : '') + '>Com quantidade</option>' +
+        '</select></label>' +
+        '<label class="campo"><span>Meta / unidade</span>' +
+          '<div class="grade2"><input type="number" id="f-meta" value="' + esc(hb.meta || '') + '" placeholder="5">' +
+          '<input type="text" id="f-unid" value="' + esc(hb.unidade || '') + '" placeholder="g"></div></label>' +
+      '</div>' +
+      '<label class="campo"><span>Dias da semana</span></label>' + seletorDias(hb.dias, 'f-dias') +
+      '<div style="height:14px"></div>' +
+      '<label class="campo" style="display:flex;align-items:center;gap:10px">' +
+        '<input type="checkbox" id="f-lembrete" ' + (hb.lembrete ? 'checked' : '') + ' style="width:auto">' +
+        '<span style="margin:0">Me lembrar no horário</span></label>' +
+      '<div style="height:8px"></div>' +
+      '<button class="btn" id="f-salvar">Salvar</button>' +
+      (novo ? '' : '<button class="btn perigo" id="f-excluir">Excluir hábito</button>') +
+      '<button class="btn sec" data-fechar>Cancelar</button>'
+    );
+
+    $('#f-salvar').onclick = function () {
+      hb.nome = $('#f-nome').value.trim() || 'Hábito';
+      hb.emoji = $('#f-emoji').value.trim() || '✅';
+      hb.horario = $('#f-hora').value || '08:00';
+      hb.tipo = $('#f-tipo').value;
+      hb.meta = $('#f-meta').value ? +$('#f-meta').value : '';
+      hb.unidade = $('#f-unid').value.trim();
+      hb.dias = lerDias('f-dias');
+      hb.lembrete = $('#f-lembrete').checked;
+      if (novo) st.habitos.push(hb);
+      fecharModal(); salvar(); brinde('Hábito salvo');
+    };
+    if (!novo) $('#f-excluir').onclick = function () {
+      st.habitos = st.habitos.filter(function (h) { return h.id !== hb.id; });
+      fecharModal(); salvar(); brinde('Hábito excluído');
+    };
+  }
+
+  function modalDivisao(id) {
+    var dv = id ? st.treino.divisao.filter(function (d) { return d.id === id; })[0] : null;
+    var novo = !dv;
+    dv = dv || { id: S.uid(), nome: 'D', foco: '', dias: [], horario: st.treino.horario, exercicios: [] };
+    var texto = dv.exercicios.map(function (e) {
+      return e.nome + ' ' + e.series + 'x' + e.reps + (e.carga ? ' @' + e.carga : '');
+    }).join('\n');
+    abrirModal(
+      '<h3>' + (novo ? 'Nova divisão' : 'Editar divisão') + '</h3>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Letra / nome</span><input type="text" id="d-nome" maxlength="12" value="' + esc(dv.nome) + '"></label>' +
+        '<label class="campo"><span>Horário</span><input type="time" id="d-hora" value="' + esc(dv.horario || st.treino.horario) + '"></label>' +
+      '</div>' +
+      '<label class="campo"><span>Foco (grupos musculares)</span><input type="text" id="d-foco" placeholder="Peito, ombro e tríceps" value="' + esc(dv.foco) + '"></label>' +
+      '<label class="campo"><span>Dias da semana</span></label>' + seletorDias(dv.dias, 'd-dias') +
+      '<div style="height:14px"></div>' +
+      '<label class="campo"><span>Exercícios — um por linha, formato <code>Nome 4x8-12</code></span>' +
+        '<textarea id="d-ex" style="min-height:150px" placeholder="Supino reto 4x8-12&#10;Elevação lateral 3x12-15">' + esc(texto) + '</textarea></label>' +
+      '<button class="btn" id="d-salvar">Salvar</button>' +
+      (novo ? '' : '<button class="btn perigo" id="d-excluir">Excluir divisão</button>') +
+      '<button class="btn sec" data-fechar>Cancelar</button>'
+    );
+
+    $('#d-salvar').onclick = function () {
+      dv.nome = $('#d-nome').value.trim() || 'D';
+      dv.foco = $('#d-foco').value.trim();
+      dv.horario = $('#d-hora').value;
+      dv.dias = lerDias('d-dias');
+      dv.exercicios = $('#d-ex').value.split('\n').map(function (linha) {
+        linha = linha.trim();
+        if (!linha) return null;
+        var carga = '';
+        var mc = /@\s*(.+)$/.exec(linha);
+        if (mc) { carga = mc[1].trim(); linha = linha.slice(0, mc.index).trim(); }
+        var m = /^(.*?)\s+(\d+)\s*[x×]\s*(.+)$/.exec(linha);
+        if (m) return { id: S.uid(), nome: m[1].trim(), series: +m[2], reps: m[3].trim(), carga: carga };
+        return { id: S.uid(), nome: linha, series: 3, reps: '10-12', carga: carga };
+      }).filter(Boolean);
+      if (novo) st.treino.divisao.push(dv);
+      fecharModal(); salvar(); brinde('Divisão salva');
+    };
+    if (!novo) $('#d-excluir').onclick = function () {
+      st.treino.divisao = st.treino.divisao.filter(function (d) { return d.id !== dv.id; });
+      fecharModal(); salvar(); brinde('Divisão excluída');
+    };
+  }
+
+  function modalRegistrarTreino(divisaoId) {
+    var dv = st.treino.divisao.filter(function (d) { return d.id === divisaoId; })[0];
+    if (!dv) return;
+    abrirModal(
+      '<h3>Treino ' + esc(dv.nome) + ' — ' + esc(dv.foco) + '</h3>' +
+      '<p class="mini" style="margin-top:-8px">Preencha a carga que usou (opcional). Fica salvo como referência pro próximo.</p>' +
+      dv.exercicios.map(function (ex) {
+        return '<div class="exercicio"><span class="nome">' + esc(ex.nome) + '<br><span class="num">' + ex.series + '×' + esc(ex.reps) + '</span></span>' +
+          '<input class="carga" data-ex="' + ex.id + '" type="text" placeholder="kg" value="' + esc(ex.carga || '') + '"></div>';
+      }).join('') +
+      '<div style="height:16px"></div>' +
+      '<button class="btn" id="t-concluir">✅ Concluir treino</button>' +
+      '<button class="btn sec" data-fechar>Cancelar</button>'
+    );
+    $('#t-concluir').onclick = function () {
+      var cargas = {};
+      $$('#modal input.carga').forEach(function (i) { cargas[i.dataset.ex] = i.value.trim(); });
+      registrarTreino(dv.id, cargas);
+      fecharModal(); brinde('Treino registrado 💪');
+    };
+  }
+
+  function modalEvento(id) {
+    var ev = id ? st.eventos.filter(function (e) { return e.id === id; })[0] : null;
+    var novo = !ev;
+    var base = new Date(); base.setMinutes(0, 0, 0); base.setHours(base.getHours() + 1);
+    ev = ev || { id: S.uid(), titulo: '', subtipo: 'evento', inicio: base.toISOString(), duracaoMin: 60, recorrencia: null, alertaMin: st.config.alertaEventoMin, notas: '' };
+    var ini = new Date(ev.inicio);
+    var recTipo = ev.recorrencia ? ev.recorrencia.tipo : 'nenhuma';
+    abrirModal(
+      '<h3>' + (novo ? 'Novo compromisso' : 'Editar compromisso') + '</h3>' +
+      '<label class="campo"><span>Título</span><input type="text" id="e-titulo" placeholder="Consulta no dentista" value="' + esc(ev.titulo) + '"></label>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Data</span><input type="date" id="e-data" value="' + S.iso(ini) + '"></label>' +
+        '<label class="campo"><span>Hora</span><input type="time" id="e-hora" value="' + hora(ini) + '"></label>' +
+      '</div>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Duração (min)</span><input type="number" id="e-dur" value="' + (ev.duracaoMin || 0) + '"></label>' +
+        '<label class="campo"><span>Avisar antes (min)</span><input type="number" id="e-alerta" value="' + ev.alertaMin + '"></label>' +
+      '</div>' +
+      '<label class="campo"><span>Repetir</span><select id="e-rec">' +
+        '<option value="nenhuma"' + (recTipo === 'nenhuma' ? ' selected' : '') + '>Não repetir</option>' +
+        '<option value="diaria"' + (recTipo === 'diaria' ? ' selected' : '') + '>Todo dia</option>' +
+        '<option value="semanal"' + (recTipo === 'semanal' ? ' selected' : '') + '>Dias da semana</option>' +
+      '</select></label>' +
+      '<div id="e-dias-wrap" style="' + (recTipo === 'semanal' ? '' : 'display:none') + '">' +
+        seletorDias(ev.recorrencia && ev.recorrencia.dias ? ev.recorrencia.dias : [], 'e-dias') +
+        '<div style="height:14px"></div>' +
+      '</div>' +
+      '<label class="campo"><span>Notas</span><textarea id="e-notas" placeholder="Endereço, o que levar...">' + esc(ev.notas || '') + '</textarea></label>' +
+      '<button class="btn" id="e-salvar">Salvar</button>' +
+      (novo ? '' : '<button class="btn perigo" id="e-excluir">Excluir</button>') +
+      '<button class="btn sec" data-fechar>Cancelar</button>'
+    );
+    $('#e-rec').onchange = function () {
+      $('#e-dias-wrap').style.display = this.value === 'semanal' ? '' : 'none';
+    };
+    $('#e-salvar').onclick = function () {
+      var p = $('#e-data').value.split('-');
+      var t = ($('#e-hora').value || '09:00').split(':');
+      var dt = new Date(+p[0], +p[1] - 1, +p[2], +t[0], +t[1], 0, 0);
+      ev.titulo = $('#e-titulo').value.trim() || 'Compromisso';
+      ev.inicio = dt.toISOString();
+      ev.duracaoMin = +$('#e-dur').value || 0;
+      ev.alertaMin = +$('#e-alerta').value || 0;
+      ev.notas = $('#e-notas').value.trim();
+      var rt = $('#e-rec').value;
+      ev.recorrencia = rt === 'nenhuma' ? null : rt === 'diaria' ? { tipo: 'diaria' } : { tipo: 'semanal', dias: lerDias('e-dias') };
+      if (ev.recorrencia && ev.recorrencia.tipo === 'semanal' && !ev.recorrencia.dias.length) ev.recorrencia = null;
+      if (novo) st.eventos.push(ev);
+      fecharModal(); salvar(); brinde('Compromisso salvo');
+    };
+    if (!novo) $('#e-excluir').onclick = function () {
+      st.eventos = st.eventos.filter(function (e) { return e.id !== ev.id; });
+      fecharModal(); salvar(); brinde('Compromisso excluído');
+    };
+  }
+
+  function modalConfig() {
+    var c = st.config, p = st.perfil;
+    abrirModal(
+      '<h3>Configurações</h3>' +
+      '<label class="campo"><span>Seu nome</span><input type="text" id="c-nome" value="' + esc(p.nome) + '" placeholder="Pedro"></label>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Acordo às</span><input type="time" id="c-acordar" value="' + esc(p.acordar) + '"></label>' +
+        '<label class="campo"><span>Durmo às</span><input type="time" id="c-dormir" value="' + esc(p.dormir) + '"></label>' +
+      '</div>' +
+      '<div class="sep"></div>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Meta de água (ml)</span><input type="number" id="c-agua" value="' + c.metaAgua + '"></label>' +
+        '<label class="campo"><span>Copo padrão (ml)</span><input type="number" id="c-copo" value="' + c.copoPadrao + '"></label>' +
+      '</div>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Meta de estudo (min)</span><input type="number" id="c-estudo" value="' + c.metaEstudoMin + '"></label>' +
+        '<label class="campo"><span>Pomodoro (min)</span><input type="number" id="c-pomo" value="' + c.pomodoroMin + '"></label>' +
+      '</div>' +
+      '<div class="grade2">' +
+        '<label class="campo"><span>Lembrar água a cada (min)</span><input type="number" id="c-int-agua" value="' + c.intervaloAguaMin + '"></label>' +
+        '<label class="campo"><span>Avisar evento antes (min)</span><input type="number" id="c-alerta" value="' + c.alertaEventoMin + '"></label>' +
+      '</div>' +
+      '<label class="campo" style="display:flex;align-items:center;gap:10px">' +
+        '<input type="checkbox" id="c-notif" ' + (c.notificacoes ? 'checked' : '') + ' style="width:auto">' +
+        '<span style="margin:0">Notificações ligadas</span></label>' +
+      '<button class="btn sec" id="c-testar">🔔 Testar notificação</button>' +
+      '<div class="sep"></div>' +
+      '<label class="campo"><span>Tema</span><select id="c-tema">' +
+        '<option value="escuro"' + (c.tema === 'escuro' ? ' selected' : '') + '>Escuro</option>' +
+        '<option value="claro"' + (c.tema === 'claro' ? ' selected' : '') + '>Claro</option>' +
+        '<option value="auto"' + (c.tema === 'auto' ? ' selected' : '') + '>Seguir o sistema</option>' +
+      '</select></label>' +
+      '<div class="linha-btn"><button class="btn sec" id="c-exportar">⬇ Backup</button>' +
+      '<button class="btn sec" id="c-importar">⬆ Restaurar</button></div>' +
+      '<input type="file" id="c-arquivo" accept="application/json" style="display:none">' +
+      '<div style="height:8px"></div>' +
+      '<button class="btn" id="c-salvar">Salvar</button>' +
+      '<button class="btn perigo" id="c-zerar">Apagar todos os dados</button>' +
+      '<button class="btn sec" data-fechar>Fechar</button>' +
+      '<p class="mini centro" style="margin-top:14px">Tudo fica salvo só no seu aparelho.</p>'
+    );
+
+    $('#c-salvar').onclick = function () {
+      p.nome = $('#c-nome').value.trim();
+      p.acordar = $('#c-acordar').value || '07:00';
+      p.dormir = $('#c-dormir').value || '23:30';
+      c.metaAgua = +$('#c-agua').value || 2000;
+      c.copoPadrao = +$('#c-copo').value || 250;
+      c.metaEstudoMin = +$('#c-estudo').value || 0;
+      c.pomodoroMin = +$('#c-pomo').value || 25;
+      c.intervaloAguaMin = +$('#c-int-agua').value || 120;
+      c.alertaEventoMin = +$('#c-alerta').value || 0;
+      c.tema = $('#c-tema').value;
+      var querNotif = $('#c-notif').checked;
+      aplicarTema();
+      if (querNotif && !c.notificacoes) { pedirNotificacoes(); } else { c.notificacoes = querNotif; }
+      fecharModal(); salvar(); brinde('Configurações salvas');
+    };
+    $('#c-testar').onclick = function () {
+      if (!('Notification' in window)) return brinde('Este navegador não suporta notificações');
+      Notification.requestPermission().then(function (perm) {
+        if (perm !== 'granted') return brinde('Permissão negada');
+        if (swReg) swReg.active && swReg.active.postMessage({ tipo: 'teste' });
+        else new Notification('🔔 Notificações ligadas', { body: 'É assim que os lembretes vão aparecer.' });
+      });
+    };
+    $('#c-exportar').onclick = exportar;
+    $('#c-importar').onclick = function () { $('#c-arquivo').click(); };
+    $('#c-arquivo').onchange = function (e) { importar(e.target.files[0]); };
+    $('#c-zerar').onclick = function () {
+      if (!confirm('Apagar TODOS os dados do app? Isso não tem volta.')) return;
+      st = S.estadoPadrao();
+      S.salvar(st).then(function () { location.reload(); });
+    };
+  }
+
+  /* ---------------- backup ---------------- */
+  function exportar() {
+    var blob = new Blob([JSON.stringify(st, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'rotina-backup-' + S.hoje() + '.json';
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 3000);
+    brinde('Backup baixado');
+  }
+
+  function importar(arquivo) {
+    if (!arquivo) return;
+    var fr = new FileReader();
+    fr.onload = function () {
+      try {
+        st = S.sanear(JSON.parse(fr.result));
+        S.salvar(st).then(function () { location.reload(); });
+      } catch (e) { brinde('Arquivo inválido'); }
+    };
+    fr.readAsText(arquivo);
+  }
+
+  /* ---------------- tema ---------------- */
+  function aplicarTema() {
+    var t = st.config.tema;
+    if (t === 'auto') {
+      t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'claro' : 'escuro';
+    }
+    document.documentElement.setAttribute('data-tema', t);
+    var mc = document.querySelector('meta[name=theme-color]');
+    if (mc) mc.setAttribute('content', t === 'claro' ? '#f4f6fa' : '#0f1115');
+  }
+
+  /* ---------------- notificações ---------------- */
+  function pedirNotificacoes() {
+    if (!('Notification' in window)) { brinde('Este navegador não suporta notificações'); return; }
+    Notification.requestPermission().then(function (perm) {
+      st.config.notificacoes = perm === 'granted';
+      salvar();
+      if (perm === 'granted') {
+        brinde('Notificações ativadas 🔔');
+        registrarSyncPeriodico();
+      } else {
+        brinde('Permissão negada');
+      }
+    });
+  }
+
+  function registrarSyncPeriodico() {
+    if (!swReg || !('periodicSync' in swReg) || !navigator.permissions) return;
+    try {
+      navigator.permissions.query({ name: 'periodic-background-sync' }).then(function (s) {
+        if (s.state === 'granted') {
+          swReg.periodicSync.register('lembretes', { minInterval: 15 * 60 * 1000 }).catch(function () { });
+        }
+      }).catch(function () { });
+    } catch (e) { /* navegador sem suporte */ }
+  }
+
+  function checarLembretes() {
+    if (!st.config.notificacoes || !swReg) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    N.disparar(st, new Date(), swReg).then(function (n) {
+      if (n > 0) S.salvar(st);
+    });
+  }
+
+  /* ---------------- timer pomodoro ---------------- */
+  var timer = { fase: 'foco', restante: 0, rodando: false, fimTs: 0, intervalo: null };
+
+  function carregarTimer() {
+    try {
+      var raw = localStorage.getItem('rotina-timer');
+      if (raw) {
+        var t = JSON.parse(raw);
+        timer.fase = t.fase || 'foco';
+        timer.fimTs = t.fimTs || 0;
+        timer.rodando = !!t.rodando;
+        timer.restante = t.restante || st.config.pomodoroMin * 60;
+        if (timer.rodando) {
+          var falta = Math.round((timer.fimTs - Date.now()) / 1000);
+          if (falta <= 0) { timer.rodando = false; concluirFase(true); }
+          else { timer.restante = falta; iniciarIntervalo(); }
+        }
+      } else {
+        timer.restante = st.config.pomodoroMin * 60;
+      }
+    } catch (e) { timer.restante = st.config.pomodoroMin * 60; }
+    pintarTimer();
+  }
+
+  function salvarTimerLS() {
+    try {
+      localStorage.setItem('rotina-timer', JSON.stringify({
+        fase: timer.fase, fimTs: timer.fimTs, rodando: timer.rodando, restante: timer.restante
+      }));
+    } catch (e) { }
+  }
+
+  function pintarTimer() {
+    var m = Math.floor(Math.max(0, timer.restante) / 60), s = Math.max(0, timer.restante) % 60;
+    $('#timer-display').textContent = pad(m) + ':' + pad(s);
+    $('#timer-fase').textContent = timer.fase === 'foco'
+      ? (timer.rodando ? 'Foco — mão na massa 📚' : 'Pomodoro — pronto para começar')
+      : (timer.rodando ? 'Pausa — respira 🌿' : 'Pausa');
+    $('#btn-timer').textContent = timer.rodando ? '⏸ Pausar' : '▶ Iniciar';
+  }
+
+  function iniciarIntervalo() {
+    clearInterval(timer.intervalo);
+    timer.intervalo = setInterval(function () {
+      timer.restante = Math.round((timer.fimTs - Date.now()) / 1000);
+      if (timer.restante <= 0) { concluirFase(); }
+      pintarTimer();
+    }, 1000);
+  }
+
+  function concluirFase(silencioso) {
+    clearInterval(timer.intervalo);
+    timer.rodando = false;
+    if (timer.fase === 'foco') {
+      addEstudo(st.config.pomodoroMin);
+      if (!silencioso) {
+        brinde('+' + st.config.pomodoroMin + ' min de estudo 📚');
+        avisar('📚 Pomodoro concluído', 'Bora de pausa de ' + st.config.pausaMin + ' min.');
+      }
+      timer.fase = 'pausa';
+      timer.restante = st.config.pausaMin * 60;
+    } else {
+      if (!silencioso) avisar('🌿 Pausa acabou', 'Voltar pro foco?');
+      timer.fase = 'foco';
+      timer.restante = st.config.pomodoroMin * 60;
+    }
+    salvarTimerLS();
+    pintarTimer();
+  }
+
+  function avisar(titulo, corpo) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    if (swReg) swReg.showNotification(titulo, { body: corpo, icon: 'icons/icon-192.png', tag: 'pomodoro' });
+    else new Notification(titulo, { body: corpo });
+  }
+
+  /* ---------------- navegação ---------------- */
+  function irPara(v) {
+    vista = v;
+    $$('.vista').forEach(function (s) { s.classList.toggle('ativa', s.id === 'vista-' + v); });
+    $$('#nav button').forEach(function (b) { b.classList.toggle('ativa', b.dataset.vista === v); });
+    renderTopo();
+    window.scrollTo(0, 0);
+    if (v === 'chat') { renderChat(); setTimeout(function () { window.scrollTo(0, document.body.scrollHeight); }, 60); }
+    try { history.replaceState(null, '', '#' + v); } catch (e) { }
+  }
+
+  /* ---------------- eventos globais ---------------- */
+  function ligarEventos() {
+    $('#nav').addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-vista]');
+      if (b) irPara(b.dataset.vista);
+    });
+
+    $('#btn-config').onclick = modalConfig;
+    $('#btn-nova-rotina').onclick = function () { modalHabito(null); };
+    $('#btn-nova-divisao').onclick = function () { modalDivisao(null); };
+    $('#btn-novo-evento').onclick = function () { modalEvento(null); };
+    $('#btn-ver-agenda').onclick = function () { irPara('agenda'); };
+    $('#btn-ir-timer').onclick = function () { irPara('estudos'); };
+    $('#btn-agua-config').onclick = modalConfig;
+
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+
+      if (t.closest('[data-fechar]')) { fecharModal(); return; }
+      if (t.id === 'modal') { fecharModal(); return; }
+
+      var bAgua = t.closest('[data-agua]');
+      if (bAgua) {
+        var ml = +bAgua.dataset.agua;
+        var tot = addAgua(ml);
+        brinde(ml > 0 ? '+' + ml + ' ml · total ' + tot + ' ml' : 'Removido · total ' + tot + ' ml');
+        return;
+      }
+
+      var bEst = t.closest('[data-estudo]');
+      if (bEst) {
+        var min = +bEst.dataset.estudo;
+        var totE = addEstudo(min);
+        brinde((min > 0 ? '+' : '') + min + ' min · total ' + totE + ' min');
+        return;
+      }
+
+      var bTog = t.closest('[data-toggle]');
+      if (bTog) {
+        var res = toggleHabito(bTog.dataset.toggle);
+        if (res) brinde(res.on ? res.habito.nome + ' ✅' : res.habito.nome + ' desmarcado');
+        return;
+      }
+
+      var item = t.closest('.item[data-habito]');
+      if (item && !t.closest('[data-toggle]')) { modalHabito(item.dataset.habito); return; }
+
+      var bReg = t.closest('[data-registrar]');
+      if (bReg) { modalRegistrarTreino(bReg.dataset.registrar); return; }
+
+      var bDiv = t.closest('[data-editar-div]');
+      if (bDiv) { modalDivisao(bDiv.dataset.editarDiv); return; }
+
+      var bConc = t.closest('[data-concluir]');
+      if (bConc) {
+        var rr = reg(bConc.dataset.d);
+        var idx = rr.eventosFeitos.indexOf(bConc.dataset.concluir);
+        if (idx === -1) rr.eventosFeitos.push(bConc.dataset.concluir); else rr.eventosFeitos.splice(idx, 1);
+        salvar();
+        return;
+      }
+
+      var bEv = t.closest('.evento[data-evento]');
+      if (bEv && !t.closest('[data-concluir]')) { modalEvento(bEv.dataset.evento); return; }
+
+      var bSug = t.closest('[data-sug]');
+      if (bSug) { $('#entrada-chat').value = bSug.dataset.sug; $('#form-chat').requestSubmit(); return; }
+
+      var bNotif = t.closest('#btn-ativar-notif');
+      if (bNotif) { pedirNotificacoes(); return; }
+
+      var bDia = t.closest('.dias-semana button');
+      if (bDia) { bDia.classList.toggle('on'); return; }
+    });
+
+    $('#form-chat').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = $('#entrada-chat').value.trim();
+      if (!v) return;
+      $('#entrada-chat').value = '';
+      processar(v);
+    });
+
+    $('#btn-timer').onclick = function () {
+      if (timer.rodando) {
+        clearInterval(timer.intervalo);
+        timer.rodando = false;
+        timer.restante = Math.max(0, Math.round((timer.fimTs - Date.now()) / 1000));
+      } else {
+        timer.rodando = true;
+        timer.fimTs = Date.now() + timer.restante * 1000;
+        iniciarIntervalo();
+      }
+      salvarTimerLS();
+      pintarTimer();
+    };
+    $('#btn-timer-zerar').onclick = function () {
+      clearInterval(timer.intervalo);
+      timer.rodando = false;
+      timer.fase = 'foco';
+      timer.restante = st.config.pomodoroMin * 60;
+      salvarTimerLS();
+      pintarTimer();
+    };
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        if (S.hoje() !== diaCorrente) { diaCorrente = S.hoje(); render(); }
+        checarLembretes();
+      }
+    });
+
+    if (window.matchMedia) {
+      window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function () {
+        if (st.config.tema === 'auto') aplicarTema();
+      });
+    }
+  }
+
+  /* ---------------- boot ---------------- */
+  function boot() {
+    S.carregar().then(function (estado) {
+      st = estado;
+      aplicarTema();
+      ligarEventos();
+      renderSugestoes();
+      render();
+      carregarTimer();
+
+      if (!st.chat.length) {
+        addMsg('bot',
+          'Oi! Sou sua rotina. 👋\n\n' +
+          'Fala comigo em português normal que eu anoto:\n' +
+          '• "bebi 500ml"\n' +
+          '• "tomei os remédios"\n' +
+          '• "estudei 1h30"\n' +
+          '• "treinei peito ombro e tríceps"\n' +
+          '• "consulta no dentista quinta 15h"\n\n' +
+          'Escreve "ajuda" quando quiser a lista completa.');
+      }
+
+      var h = (location.hash || '').replace('#', '');
+      if (['hoje', 'chat', 'treino', 'estudos', 'agenda'].indexOf(h) !== -1) irPara(h);
+
+      setInterval(function () {
+        if (S.hoje() !== diaCorrente) { diaCorrente = S.hoje(); render(); }
+        checarLembretes();
+      }, 30000);
+
+      setTimeout(checarLembretes, 2500);
+    });
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').then(function (r) {
+        swReg = r;
+        registrarSyncPeriodico();
+      }).catch(function () { });
+    }
+
+    checarAtualizacao();
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) checarAtualizacao();
+    });
+  }
+
+  /* ---------- atualização automática ----------
+     versao.json é servido sem cache. Se o valor mudou desde a última vez que
+     o app abriu, saiu versão nova no servidor: mostra a barra e, ao tocar,
+     limpa o cache do service worker e recarrega. Os dados (IndexedDB /
+     localStorage) não são tocados. */
+  var CHAVE_VERSAO = 'rotina.versao';
+  var checando = false;
+  var ultimaChecagem = 0;
+
+  function checarAtualizacao() {
+    var agora = Date.now();
+    if (checando || agora - ultimaChecagem < 60000) return;
+    checando = true;
+    ultimaChecagem = agora;
+    fetch('versao.json?t=' + agora, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        checando = false;
+        var v = j && j.versao;
+        if (!v) return;
+        var anterior = null;
+        try { anterior = localStorage.getItem(CHAVE_VERSAO); } catch (e) { }
+        if (!anterior) { try { localStorage.setItem(CHAVE_VERSAO, v); } catch (e) { } return; }
+        if (anterior !== v) mostrarBarraAtualizacao(v);
+      })
+      .catch(function () { checando = false; });
+  }
+
+  function mostrarBarraAtualizacao(v) {
+    if (document.getElementById('barra-atualizacao')) return;
+    var b = document.createElement('div');
+    b.id = 'barra-atualizacao';
+    b.className = 'barra-atualizacao';
+    b.innerHTML = '<span>Nova versão disponível</span>' +
+      '<button type="button">Atualizar</button>';
+    b.querySelector('button').addEventListener('click', function () {
+      b.querySelector('button').textContent = 'Atualizando…';
+      aplicarAtualizacao(v);
+    });
+    document.body.appendChild(b);
+  }
+
+  function aplicarAtualizacao(v) {
+    try { localStorage.setItem(CHAVE_VERSAO, v); } catch (e) { }
+    var passos = [];
+    if (window.caches) {
+      passos.push(caches.keys().then(function (ks) {
+        return Promise.all(ks.map(function (k) { return caches.delete(k); }));
+      }).catch(function () { }));
+    }
+    if (navigator.serviceWorker) {
+      passos.push(navigator.serviceWorker.getRegistration()
+        .then(function (r) { return r ? r.update() : null; })
+        .catch(function () { }));
+    }
+    Promise.all(passos).catch(function () { }).then(function () {
+      location.reload();
+    });
+  }
+
+  window.RotinaApp = { irPara: irPara, get estado() { return st; } };
+  document.addEventListener('DOMContentLoaded', boot);
+})();

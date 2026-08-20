@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Rotina</title>
+<meta name="description" content="Assistente pessoal de rotina: remédios, água, academia, estudos e compromissos.">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rotina">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<header class="topo">
+  <div style="flex:1;min-width:0">
+    <h1 id="titulo-topo">Hoje</h1>
+    <span class="sub" id="sub-topo">—</span>
+  </div>
+  <button class="icone-btn" id="btn-config" aria-label="Configurações">⚙️</button>
+</header>
+
+<main>
+
+  <!-- ======================= HOJE ======================= -->
+  <section class="vista ativa" id="vista-hoje">
+    <div id="aviso-notif"></div>
+
+    <div class="cartao">
+      <div class="saudacao">
+        <div class="txt">
+          <h2 id="saudacao">Bom dia</h2>
+          <p id="resumo-dia">—</p>
+        </div>
+        <div class="anel">
+          <svg width="68" height="68" viewBox="0 0 68 68">
+            <circle cx="34" cy="34" r="29" fill="none" stroke="var(--surface-3)" stroke-width="6"></circle>
+            <circle id="anel-prog" cx="34" cy="34" r="29" fill="none" stroke="var(--accent)"
+                    stroke-width="6" stroke-linecap="round" stroke-dasharray="182" stroke-dashoffset="182"
+                    style="transition:stroke-dashoffset .5s cubic-bezier(.2,.8,.2,1)"></circle>
+          </svg>
+          <div class="valor" id="anel-valor">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h2>💧 Água <button class="acao" id="btn-agua-config">meta</button></h2>
+      <div class="agua-topo">
+        <span class="n" id="agua-n">0 ml</span>
+        <span class="d" id="agua-d">de 2500 ml</span>
+      </div>
+      <div class="barra"><i id="agua-barra" style="width:0%"></i></div>
+      <div class="chips" id="agua-chips"></div>
+    </div>
+
+    <div class="cartao">
+      <h2>✅ Rotina de hoje <button class="acao" id="btn-nova-rotina">+ hábito</button></h2>
+      <div id="lista-habitos"></div>
+    </div>
+
+    <div class="cartao" id="cartao-treino-hoje">
+      <h2>🏋️ Treino</h2>
+      <div id="treino-hoje"></div>
+    </div>
+
+    <div class="cartao">
+      <h2>📚 Estudo</h2>
+      <div class="agua-topo">
+        <span class="n" id="estudo-n">0 min</span>
+        <span class="d" id="estudo-d">de 60 min</span>
+      </div>
+      <div class="barra"><i id="estudo-barra" style="width:0%"></i></div>
+      <div class="chips">
+        <button class="chip" data-estudo="15">+15 min</button>
+        <button class="chip" data-estudo="30">+30 min</button>
+        <button class="chip" data-estudo="60">+1 h</button>
+        <button class="chip forte" id="btn-ir-timer">▶ Timer</button>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h2>📅 Próximos <button class="acao" id="btn-ver-agenda">ver tudo</button></h2>
+      <div id="proximos"></div>
+    </div>
+  </section>
+
+  <!-- ======================= CHAT ======================= -->
+  <section class="vista" id="vista-chat">
+    <div class="mensagens" id="mensagens"></div>
+    <div class="sugestoes" id="sugestoes"></div>
+    <form class="compositor" id="form-chat" autocomplete="off">
+      <input type="text" id="entrada-chat" placeholder="Ex.: consulta no dentista quinta 15h" aria-label="Mensagem">
+      <button type="submit" aria-label="Enviar">↑</button>
+    </form>
+  </section>
+
+  <!-- ======================= TREINO ======================= -->
+  <section class="vista" id="vista-treino">
+    <div id="treino-conteudo"></div>
+    <button class="btn sec" id="btn-nova-divisao">+ Nova divisão de treino</button>
+    <div class="sep"></div>
+    <div class="cartao">
+      <h2>📈 Últimos 14 dias</h2>
+      <div id="treino-historico"></div>
+    </div>
+  </section>
+
+  <!-- ======================= ESTUDOS ======================= -->
+  <section class="vista" id="vista-estudos">
+    <div class="cartao">
+      <div class="timer">
+        <div class="display" id="timer-display">25:00</div>
+        <div class="fase" id="timer-fase">Pomodoro — pronto para começar</div>
+        <div class="linha-btn">
+          <button class="btn" id="btn-timer">▶ Iniciar</button>
+          <button class="btn sec" id="btn-timer-zerar" style="max-width:120px">Zerar</button>
+        </div>
+      </div>
+    </div>
+    <div class="cartao">
+      <h2>Hoje</h2>
+      <div class="agua-topo">
+        <span class="n" id="estudo-n2">0 min</span>
+        <span class="d" id="estudo-d2">de 60 min</span>
+      </div>
+      <div class="barra"><i id="estudo-barra2" style="width:0%"></i></div>
+      <div class="chips">
+        <button class="chip" data-estudo="15">+15 min</button>
+        <button class="chip" data-estudo="30">+30 min</button>
+        <button class="chip" data-estudo="45">+45 min</button>
+        <button class="chip" data-estudo="-15">−15 min</button>
+      </div>
+    </div>
+    <div class="cartao">
+      <h2>Últimos 7 dias <span class="streak" id="estudo-streak"></span></h2>
+      <div class="semana" id="estudo-semana"></div>
+      <p class="mini centro" id="estudo-media">—</p>
+    </div>
+  </section>
+
+  <!-- ======================= AGENDA ======================= -->
+  <section class="vista" id="vista-agenda">
+    <button class="btn" id="btn-novo-evento" style="margin-bottom:16px">+ Novo compromisso</button>
+    <div id="lista-agenda"></div>
+  </section>
+
+</main>
+
+<nav class="nav" id="nav">
+  <button data-vista="hoje" class="ativa"><span class="ic">🏠</span>Hoje</button>
+  <button data-vista="chat"><span class="ic">💬</span>Chat</button>
+  <button data-vista="treino"><span class="ic">🏋️</span>Treino</button>
+  <button data-vista="estudos"><span class="ic">📚</span>Estudos</button>
+  <button data-vista="agenda"><span class="ic">📅</span>Agenda</button>
+</nav>
+
+<div class="modal" id="modal">
+  <div class="folha">
+    <div class="puxador"></div>
+    <div id="modal-conteudo"></div>
+  </div>
+</div>
+
+<div class="brinde" id="brinde"></div>
+
+<script src="js/store.js"></script>
+<script src="js/nlp.js"></script>
+<script src="js/notify.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
