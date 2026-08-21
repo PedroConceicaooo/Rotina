@@ -12,6 +12,8 @@
   var swReg = null;
   var vista = 'hoje';
   var diaCorrente = S.hoje();
+  // preferência de expandir/colapsar divisão de treino — só de sessão, não salva no estado
+  var divisaoAberta = {};
 
   /* ---------------- utilidades ---------------- */
   function $(s, r) {
@@ -240,18 +242,29 @@
     $('#anel-prog').setAttribute('stroke-dashoffset', (circ * (1 - s / 100)).toFixed(1));
     $('#anel-valor').textContent = s + '%';
 
-    var pend = [];
+    // hábitos e metas (treino/estudo) ficam em listas separadas — juntar tudo
+    // numa frase só deixava o "e mais N" ambíguo (hábito? meta? os dois?)
+    var pendHabitos = [];
     st.habitos.forEach(function (hb) {
       if (hb.ativo && (hb.dias || []).indexOf(d.getDay()) !== -1 && !r.habitos[hb.id])
-        pend.push(hb.nome);
+        pendHabitos.push(hb.nome);
     });
+    var pendMetas = [];
     var divs = N.treinoDoDia(st, d);
-    if (divs && !r.treinos.length) pend.push('treino ' + divs[0].nome);
-    if ((r.estudoMin || 0) < st.config.metaEstudoMin) pend.push('estudo');
-    $('#resumo-dia').textContent = pend.length
-      ? 'Falta: ' +
-        pend.slice(0, 3).join(', ') +
-        (pend.length > 3 ? ' e mais ' + (pend.length - 3) : '')
+    if (divs && !r.treinos.length) pendMetas.push('treino ' + divs[0].nome);
+    if ((r.estudoMin || 0) < st.config.metaEstudoMin) pendMetas.push('estudo');
+
+    var partes = [];
+    if (pendHabitos.length) {
+      partes.push(
+        pendHabitos.slice(0, 3).join(', ') +
+          (pendHabitos.length > 3 ? ' e mais ' + (pendHabitos.length - 3) : '')
+      );
+    }
+    if (pendMetas.length) partes.push(pendMetas.join(', '));
+
+    $('#resumo-dia').textContent = partes.length
+      ? 'Falta: ' + partes.join(' · ')
       : 'Tudo em dia por aqui. 👏';
 
     // água
@@ -269,7 +282,11 @@
       '<button class="chip" data-agua="500">+500 ml</button>' +
       '<button class="chip" data-agua="' +
       -copo +
-      '">−</button>';
+      '" aria-label="Remover ' +
+      copo +
+      ' ml">−' +
+      copo +
+      ' ml</button>';
 
     // hábitos
     var lista = st.habitos.filter(function (hb) {
@@ -343,14 +360,20 @@
     $('#estudo-d').textContent = 'de ' + me + ' min';
     $('#estudo-barra').style.width = Math.min(100, me ? (em / me) * 100 : 0) + '%';
 
-    // próximos
+    // próximos — só a 1ª ocorrência de cada recorrência, senão "toda terça"
+    // sozinha ocupa a prévia inteira e esconde os outros compromissos
     var prox = [];
+    var vistoRec = {};
     for (var i = 0; i < 14 && prox.length < 5; i++) {
       var dia = new Date(d.getTime());
       dia.setDate(dia.getDate() + i);
       N.eventosDoDia(st, dia).forEach(function (o) {
         if (prox.length >= 5) return;
         if (i === 0 && o.quando < new Date()) return;
+        if (o.ev.recorrencia) {
+          if (vistoRec[o.ev.id]) return;
+          vistoRec[o.ev.id] = true;
+        }
         prox.push({ o: o, dia: dia });
       });
     }
@@ -397,12 +420,23 @@
   function renderTreino() {
     var hojeDow = new Date().getDay();
     var r = reg();
-    $('#treino-conteudo').innerHTML = st.treino.divisao
+    var ordemDivisao = st.treino.divisao.slice().sort(function (a, b) {
+      var aHoje = (a.dias || []).indexOf(hojeDow) !== -1;
+      var bHoje = (b.dias || []).indexOf(hojeDow) !== -1;
+      return (bHoje ? 1 : 0) - (aHoje ? 1 : 0);
+    });
+    $('#treino-conteudo').innerHTML = ordemDivisao
       .map(function (dv) {
         var ehHoje = (dv.dias || []).indexOf(hojeDow) !== -1;
+        var aberta = divisaoAberta[dv.id] !== undefined ? divisaoAberta[dv.id] : ehHoje;
         return (
           '<div class="cartao">' +
-          '<div class="divisao-cab">' +
+          '<div class="divisao-cab" data-toggle-div="' +
+          dv.id +
+          '" style="cursor:pointer">' +
+          '<span class="chevron">' +
+          (aberta ? '▾' : '▸') +
+          '</span>' +
           '<span class="tag ' +
           (ehHoje ? 'hoje' : '') +
           '">' +
@@ -419,30 +453,35 @@
           diasLabel(dv.dias) +
           ' · ' +
           esc(dv.horario || st.treino.horario) +
+          (aberta ? '' : ' · ' + dv.exercicios.length + ' exercícios') +
           '</p>' +
-          dv.exercicios
-            .map(function (ex) {
-              return (
-                '<div class="exercicio"><span class="nome">' +
-                esc(ex.nome) +
-                '</span>' +
-                '<span class="num">' +
-                ex.series +
-                '×' +
-                esc(ex.reps) +
-                (ex.carga ? ' · ' + esc(ex.carga) : '') +
-                '</span></div>'
-              );
-            })
-            .join('') +
-          '<div style="height:12px"></div>' +
-          '<button class="btn ' +
-          (ehHoje ? '' : 'sec') +
-          '" data-registrar="' +
-          dv.id +
-          '">' +
-          (ehHoje && r.treinos.length ? 'Registrar de novo' : 'Registrar treino ' + esc(dv.nome)) +
-          '</button>' +
+          (!aberta
+            ? ''
+            : dv.exercicios
+                .map(function (ex) {
+                  return (
+                    '<div class="exercicio"><span class="nome">' +
+                    esc(ex.nome) +
+                    '</span>' +
+                    '<span class="num">' +
+                    ex.series +
+                    '×' +
+                    esc(ex.reps) +
+                    (ex.carga ? ' · ' + esc(ex.carga) : '') +
+                    '</span></div>'
+                  );
+                })
+                .join('') +
+              '<div style="height:12px"></div>' +
+              '<button class="btn ' +
+              (ehHoje ? '' : 'sec') +
+              '" data-registrar="' +
+              dv.id +
+              '">' +
+              (ehHoje && r.treinos.length
+                ? 'Registrar de novo'
+                : 'Registrar treino ' + esc(dv.nome)) +
+              '</button>') +
           '</div>'
         );
       })
@@ -547,56 +586,84 @@
 
   /* ---------------- vista: AGENDA ---------------- */
   function renderAgenda() {
-    var d0 = hojeD(),
-      html = '',
-      achou = false;
+    var d0 = hojeD();
+    var todos = [];
     for (var i = 0; i < 35; i++) {
       var dia = new Date(d0.getTime());
       dia.setDate(dia.getDate() + i);
-      var evs = N.eventosDoDia(st, dia);
-      if (!evs.length) continue;
-      achou = true;
-      var rot = i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : nomeDia(dia) + ', ' + dataCurta(dia);
-      html += '<div class="dia-cab">' + rot + '</div>';
-      var rr = st.registros[S.iso(dia)];
-      evs.forEach(function (o) {
-        var feito = rr && rr.eventosFeitos && rr.eventosFeitos.indexOf(o.ev.id) !== -1;
-        var passou = o.quando < new Date();
-        html +=
-          '<div class="evento ' +
-          (feito || passou ? 'passado' : '') +
-          '" data-evento="' +
-          o.ev.id +
-          '" data-dia="' +
-          S.iso(dia) +
-          '">' +
-          '<div class="hora">' +
-          hora(o.quando) +
-          '</div>' +
-          '<div class="corpo"><div class="t">' +
-          esc(o.ev.titulo) +
-          '</div>' +
-          '<div class="d">' +
-          (o.ev.recorrencia ? '🔁 ' + recorrenciaLabel(o.ev.recorrencia) + ' · ' : '') +
-          (o.ev.duracaoMin ? o.ev.duracaoMin + ' min · ' : '') +
-          'alerta ' +
-          (typeof o.ev.alertaMin === 'number' ? o.ev.alertaMin : st.config.alertaEventoMin) +
-          ' min antes' +
-          (o.ev.notas ? '<br>' + esc(o.ev.notas) : '') +
-          '</div></div>' +
-          '<button class="marcar ' +
-          (feito ? 'on' : '') +
-          '" data-concluir="' +
-          o.ev.id +
-          '" data-d="' +
-          S.iso(dia) +
-          '">✓</button>' +
-          '</div>';
+      N.eventosDoDia(st, dia).forEach(function (o) {
+        todos.push({ dia: dia, i: i, o: o });
       });
     }
-    $('#lista-agenda').innerHTML = achou
+
+    // recorrência só mostra a próxima ocorrência na lista — sem isso, um
+    // compromisso semanal vira uma dúzia de cards idênticos e afoga os
+    // compromissos únicos
+    var totalPorEvento = {};
+    todos.forEach(function (e) {
+      totalPorEvento[e.o.ev.id] = (totalPorEvento[e.o.ev.id] || 0) + 1;
+    });
+
+    var mostrado = {};
+    var html = '';
+    var diaAtualStr = null;
+    todos.forEach(function (e) {
+      if (e.o.ev.recorrencia) {
+        if (mostrado[e.o.ev.id]) return;
+        mostrado[e.o.ev.id] = true;
+      }
+      var diaStr = S.iso(e.dia);
+      if (diaStr !== diaAtualStr) {
+        diaAtualStr = diaStr;
+        var rot =
+          e.i === 0 ? 'Hoje' : e.i === 1 ? 'Amanhã' : nomeDia(e.dia) + ', ' + dataCurta(e.dia);
+        html += '<div class="dia-cab">' + rot + '</div>';
+      }
+      var rr = st.registros[diaStr];
+      var o = e.o;
+      var feito = rr && rr.eventosFeitos && rr.eventosFeitos.indexOf(o.ev.id) !== -1;
+      var passou = o.quando < new Date();
+      var extras = totalPorEvento[o.ev.id] - 1;
+      html +=
+        '<div class="evento ' +
+        (feito || passou ? 'passado' : '') +
+        '" data-evento="' +
+        o.ev.id +
+        '" data-dia="' +
+        diaStr +
+        '">' +
+        '<div class="hora">' +
+        hora(o.quando) +
+        '</div>' +
+        '<div class="corpo"><div class="t">' +
+        esc(o.ev.titulo) +
+        '</div>' +
+        '<div class="d">' +
+        (o.ev.recorrencia
+          ? '🔁 ' +
+            recorrenciaLabel(o.ev.recorrencia) +
+            (extras > 0 ? ' · +' + extras + (extras === 1 ? ' próxima' : ' próximas') : '') +
+            ' · '
+          : '') +
+        (o.ev.duracaoMin ? o.ev.duracaoMin + ' min · ' : '') +
+        'alerta ' +
+        (typeof o.ev.alertaMin === 'number' ? o.ev.alertaMin : st.config.alertaEventoMin) +
+        ' min antes' +
+        (o.ev.notas ? '<br>' + esc(o.ev.notas) : '') +
+        '</div></div>' +
+        '<button class="marcar ' +
+        (feito ? 'on' : '') +
+        '" data-concluir="' +
+        o.ev.id +
+        '" data-d="' +
+        diaStr +
+        '">✓</button>' +
+        '</div>';
+    });
+
+    $('#lista-agenda').innerHTML = todos.length
       ? html
-      : '<p class="vazio">Nenhum compromisso nos próximos 60 dias.<br>Use o chat: "consulta no dentista quinta 15h".</p>';
+      : '<p class="vazio">Nenhum compromisso nos próximos 35 dias.<br>Use o chat: "consulta no dentista quinta 15h".</p>';
   }
 
   /* ---------------- render geral ---------------- */
@@ -1076,9 +1143,9 @@
         seletorDias(hb.dias, 'f-dias') +
         '<div style="height:14px"></div>' +
         '<label class="campo" style="display:flex;align-items:center;gap:10px">' +
-        '<input type="checkbox" id="f-lembrete" ' +
+        '<input type="checkbox" class="toggle" id="f-lembrete" ' +
         (hb.lembrete ? 'checked' : '') +
-        ' style="width:auto">' +
+        '>' +
         '<span style="margin:0">Me lembrar no horário</span></label>' +
         '<div style="height:8px"></div>' +
         '<button class="btn" id="f-salvar">Salvar</button>' +
@@ -1395,9 +1462,9 @@
         '"></label>' +
         '</div>' +
         '<label class="campo" style="display:flex;align-items:center;gap:10px">' +
-        '<input type="checkbox" id="c-notif" ' +
+        '<input type="checkbox" class="toggle" id="c-notif" ' +
         (c.notificacoes ? 'checked' : '') +
-        ' style="width:auto">' +
+        '>' +
         '<span style="margin:0">Notificações ligadas</span></label>' +
         '<button class="btn sec" id="c-testar">🔔 Testar notificação</button>' +
         '<div class="sep"></div>' +
@@ -1771,6 +1838,20 @@
       var bDiv = alvo(t, '[data-editar-div]');
       if (bDiv) {
         modalDivisao(bDiv.dataset.editarDiv);
+        return;
+      }
+
+      var bTogDiv = alvo(t, '[data-toggle-div]');
+      if (bTogDiv) {
+        var idDiv = bTogDiv.dataset.toggleDiv;
+        var hojeDow = new Date().getDay();
+        var dvAtual = st.treino.divisao.filter(function (d) {
+          return d.id === idDiv;
+        })[0];
+        var ehHojeAtual = dvAtual && (dvAtual.dias || []).indexOf(hojeDow) !== -1;
+        var abertaAtual = divisaoAberta[idDiv] !== undefined ? divisaoAberta[idDiv] : ehHojeAtual;
+        divisaoAberta[idDiv] = !abertaAtual;
+        renderTreino();
         return;
       }
 
