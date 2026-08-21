@@ -1,0 +1,10 @@
+node_modules
+testes/screenshots
+*.md
+*.yml
+*.yaml
+*.css
+*.html
+*.json
+!package.json
+*.webmanifest

@@ -18,8 +18,12 @@
         var db = req.result;
         if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE);
       };
-      req.onsuccess = function () { resolve(req.result); };
-      req.onerror = function () { reject(req.error); };
+      req.onsuccess = function () {
+        resolve(req.result);
+      };
+      req.onerror = function () {
+        reject(req.error);
+      };
     });
   }
 
@@ -28,8 +32,12 @@
       return new Promise(function (resolve, reject) {
         var tx = db.transaction(STORE, 'readonly');
         var req = tx.objectStore(STORE).get(key);
-        req.onsuccess = function () { resolve(req.result); };
-        req.onerror = function () { reject(req.error); };
+        req.onsuccess = function () {
+          resolve(req.result);
+        };
+        req.onerror = function () {
+          reject(req.error);
+        };
       });
     });
   }
@@ -39,25 +47,36 @@
       return new Promise(function (resolve, reject) {
         var tx = db.transaction(STORE, 'readwrite');
         tx.objectStore(STORE).put(value, key);
-        tx.oncomplete = function () { resolve(true); };
-        tx.onerror = function () { reject(tx.error); };
+        tx.oncomplete = function () {
+          resolve(true);
+        };
+        tx.onerror = function () {
+          reject(tx.error);
+        };
       });
     });
   }
 
   /* ---------- utilitários de data ---------- */
-  function pad(n) { return String(n).padStart(2, '0'); }
+  function pad(n) {
+    return String(n).padStart(2, '0');
+  }
 
   function iso(d) {
     d = d || new Date();
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
 
-  function hoje() { return iso(new Date()); }
+  function hoje() {
+    return iso(new Date());
+  }
 
-  function hhmm(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function hhmm(d) {
+    return pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
 
-  function deISO(s) { // 'YYYY-MM-DD' -> Date local (meio-dia evita fuso)
+  function deISO(s) {
+    // 'YYYY-MM-DD' -> Date local (meio-dia evita fuso)
     var p = String(s).split('-');
     return new Date(+p[0], +p[1] - 1, +p[2], 12, 0, 0, 0);
   }
@@ -68,10 +87,11 @@
     return x;
   }
 
-  function minutosDoDia(str) { // '19:30' -> 1170
+  function minutosDoDia(str) {
+    // '19:30' -> 1170
     if (!str) return null;
     var p = String(str).split(':');
-    return (+p[0]) * 60 + (+(p[1] || 0));
+    return +p[0] * 60 + +(p[1] || 0);
   }
 
   function uid() {
@@ -97,37 +117,90 @@
         intervaloAguaMin: 120
       },
       habitos: [
-        { id: uid(), nome: 'Remédios', emoji: '💊', tipo: 'check', horario: '08:00', dias: [0,1,2,3,4,5,6], lembrete: true, ativo: true },
-        { id: uid(), nome: 'Creatina', emoji: '🥤', tipo: 'quantidade', meta: 5, unidade: 'g', horario: '09:00', dias: [0,1,2,3,4,5,6], lembrete: true, ativo: true },
-        { id: uid(), nome: 'Alongamento', emoji: '🧘', tipo: 'check', horario: '21:00', dias: [1,3,5], lembrete: false, ativo: true }
+        {
+          id: uid(),
+          nome: 'Remédios',
+          emoji: '💊',
+          tipo: 'check',
+          horario: '08:00',
+          dias: [0, 1, 2, 3, 4, 5, 6],
+          lembrete: true,
+          ativo: true
+        },
+        {
+          id: uid(),
+          nome: 'Creatina',
+          emoji: '🥤',
+          tipo: 'quantidade',
+          meta: 5,
+          unidade: 'g',
+          horario: '09:00',
+          dias: [0, 1, 2, 3, 4, 5, 6],
+          lembrete: true,
+          ativo: true
+        },
+        {
+          id: uid(),
+          nome: 'Alongamento',
+          emoji: '🧘',
+          tipo: 'check',
+          horario: '21:00',
+          dias: [1, 3, 5],
+          lembrete: false,
+          ativo: true
+        }
       ],
       treino: {
         lembrete: true,
         horario: '19:00',
         divisao: [
-          { id: uid(), nome: 'A', foco: 'Peito, ombro e tríceps', dias: [1, 4], exercicios: [
-            { id: uid(), nome: 'Supino reto', series: 4, reps: '8-12', carga: '' },
-            { id: uid(), nome: 'Supino inclinado com halteres', series: 3, reps: '10-12', carga: '' },
-            { id: uid(), nome: 'Desenvolvimento militar', series: 4, reps: '8-10', carga: '' },
-            { id: uid(), nome: 'Elevação lateral', series: 3, reps: '12-15', carga: '' },
-            { id: uid(), nome: 'Tríceps na polia', series: 3, reps: '10-15', carga: '' },
-            { id: uid(), nome: 'Tríceps francês', series: 3, reps: '10-12', carga: '' }
-          ] },
-          { id: uid(), nome: 'B', foco: 'Costas e bíceps', dias: [2, 5], exercicios: [
-            { id: uid(), nome: 'Barra fixa / puxada alta', series: 4, reps: '8-12', carga: '' },
-            { id: uid(), nome: 'Remada curvada', series: 4, reps: '8-12', carga: '' },
-            { id: uid(), nome: 'Remada unilateral', series: 3, reps: '10-12', carga: '' },
-            { id: uid(), nome: 'Rosca direta', series: 3, reps: '10-12', carga: '' },
-            { id: uid(), nome: 'Rosca martelo', series: 3, reps: '10-12', carga: '' }
-          ] },
-          { id: uid(), nome: 'C', foco: 'Pernas e abdômen', dias: [3, 6], exercicios: [
-            { id: uid(), nome: 'Agachamento livre', series: 4, reps: '8-12', carga: '' },
-            { id: uid(), nome: 'Leg press', series: 4, reps: '10-15', carga: '' },
-            { id: uid(), nome: 'Cadeira extensora', series: 3, reps: '12-15', carga: '' },
-            { id: uid(), nome: 'Mesa flexora', series: 3, reps: '12-15', carga: '' },
-            { id: uid(), nome: 'Panturrilha em pé', series: 4, reps: '15-20', carga: '' },
-            { id: uid(), nome: 'Prancha', series: 3, reps: '45s', carga: '' }
-          ] }
+          {
+            id: uid(),
+            nome: 'A',
+            foco: 'Peito, ombro e tríceps',
+            dias: [1, 4],
+            exercicios: [
+              { id: uid(), nome: 'Supino reto', series: 4, reps: '8-12', carga: '' },
+              {
+                id: uid(),
+                nome: 'Supino inclinado com halteres',
+                series: 3,
+                reps: '10-12',
+                carga: ''
+              },
+              { id: uid(), nome: 'Desenvolvimento militar', series: 4, reps: '8-10', carga: '' },
+              { id: uid(), nome: 'Elevação lateral', series: 3, reps: '12-15', carga: '' },
+              { id: uid(), nome: 'Tríceps na polia', series: 3, reps: '10-15', carga: '' },
+              { id: uid(), nome: 'Tríceps francês', series: 3, reps: '10-12', carga: '' }
+            ]
+          },
+          {
+            id: uid(),
+            nome: 'B',
+            foco: 'Costas e bíceps',
+            dias: [2, 5],
+            exercicios: [
+              { id: uid(), nome: 'Barra fixa / puxada alta', series: 4, reps: '8-12', carga: '' },
+              { id: uid(), nome: 'Remada curvada', series: 4, reps: '8-12', carga: '' },
+              { id: uid(), nome: 'Remada unilateral', series: 3, reps: '10-12', carga: '' },
+              { id: uid(), nome: 'Rosca direta', series: 3, reps: '10-12', carga: '' },
+              { id: uid(), nome: 'Rosca martelo', series: 3, reps: '10-12', carga: '' }
+            ]
+          },
+          {
+            id: uid(),
+            nome: 'C',
+            foco: 'Pernas e abdômen',
+            dias: [3, 6],
+            exercicios: [
+              { id: uid(), nome: 'Agachamento livre', series: 4, reps: '8-12', carga: '' },
+              { id: uid(), nome: 'Leg press', series: 4, reps: '10-15', carga: '' },
+              { id: uid(), nome: 'Cadeira extensora', series: 3, reps: '12-15', carga: '' },
+              { id: uid(), nome: 'Mesa flexora', series: 3, reps: '12-15', carga: '' },
+              { id: uid(), nome: 'Panturrilha em pé', series: 4, reps: '15-20', carga: '' },
+              { id: uid(), nome: 'Prancha', series: 3, reps: '45s', carga: '' }
+            ]
+          }
         ]
       },
       eventos: [],
@@ -141,7 +214,13 @@
   function registroDe(state, data) {
     data = data || hoje();
     if (!state.registros[data]) {
-      state.registros[data] = { habitos: {}, agua: 0, estudoMin: 0, treinos: [], eventosFeitos: [] };
+      state.registros[data] = {
+        habitos: {},
+        agua: 0,
+        estudoMin: 0,
+        treinos: [],
+        eventosFeitos: []
+      };
     }
     var r = state.registros[data];
     if (!r.habitos) r.habitos = {};
@@ -178,18 +257,28 @@
           try {
             var raw = localStorage.getItem('rotina-backup');
             if (raw) return sanear(JSON.parse(raw));
-          } catch (e) { /* ignora */ }
+          } catch (e) {
+            /* ignora */
+          }
         }
         return estadoPadrao();
       })
-      .catch(function () { return estadoPadrao(); });
+      .catch(function () {
+        return estadoPadrao();
+      });
   }
 
   function salvar(state) {
     if (typeof localStorage !== 'undefined') {
-      try { localStorage.setItem('rotina-backup', JSON.stringify(state)); } catch (e) { /* cota */ }
+      try {
+        localStorage.setItem('rotina-backup', JSON.stringify(state));
+      } catch (e) {
+        /* cota */
+      }
     }
-    return idbSet(KEY, state).catch(function () { return false; });
+    return idbSet(KEY, state).catch(function () {
+      return false;
+    });
   }
 
   root.RotinaStore = {
@@ -202,7 +291,13 @@
     registroDe: registroDe,
     sanear: sanear,
     // helpers exportados
-    pad: pad, iso: iso, hoje: hoje, hhmm: hhmm, deISO: deISO,
-    addDias: addDias, minutosDoDia: minutosDoDia, uid: uid
+    pad: pad,
+    iso: iso,
+    hoje: hoje,
+    hhmm: hhmm,
+    deISO: deISO,
+    addDias: addDias,
+    minutosDoDia: minutosDoDia,
+    uid: uid
   };
 })(typeof self !== 'undefined' ? self : this);

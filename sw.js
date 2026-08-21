@@ -20,22 +20,34 @@ var ARQUIVOS = [
 
 self.addEventListener('install', function (e) {
   e.waitUntil(
-    caches.open(VERSAO)
-      .then(function (c) { return c.addAll(ARQUIVOS); })
-      .then(function () { return self.skipWaiting(); })
-      .catch(function () { return self.skipWaiting(); })
+    caches
+      .open(VERSAO)
+      .then(function (c) {
+        return c.addAll(ARQUIVOS);
+      })
+      .then(function () {
+        return self.skipWaiting();
+      })
+      .catch(function () {
+        return self.skipWaiting();
+      })
   );
 });
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(
-    caches.keys()
+    caches
+      .keys()
       .then(function (chaves) {
-        return Promise.all(chaves.map(function (k) {
-          return k === VERSAO ? null : caches.delete(k);
-        }));
+        return Promise.all(
+          chaves.map(function (k) {
+            return k === VERSAO ? null : caches.delete(k);
+          })
+        );
       })
-      .then(function () { return self.clients.claim(); })
+      .then(function () {
+        return self.clients.claim();
+      })
   );
 });
 
@@ -53,11 +65,15 @@ self.addEventListener('fetch', function (e) {
       fetch(req)
         .then(function (r) {
           var copia = r.clone();
-          caches.open(VERSAO).then(function (c) { c.put(req, copia); });
+          caches.open(VERSAO).then(function (c) {
+            c.put(req, copia);
+          });
           return r;
         })
         .catch(function () {
-          return caches.match(req).then(function (r) { return r || caches.match('./index.html'); });
+          return caches.match(req).then(function (r) {
+            return r || caches.match('./index.html');
+          });
         })
     );
     return;
@@ -65,13 +81,19 @@ self.addEventListener('fetch', function (e) {
 
   e.respondWith(
     caches.match(req).then(function (cacheado) {
-      var rede = fetch(req).then(function (r) {
-        if (r && r.status === 200) {
-          var copia = r.clone();
-          caches.open(VERSAO).then(function (c) { c.put(req, copia); });
-        }
-        return r;
-      }).catch(function () { return cacheado; });
+      var rede = fetch(req)
+        .then(function (r) {
+          if (r && r.status === 200) {
+            var copia = r.clone();
+            caches.open(VERSAO).then(function (c) {
+              c.put(req, copia);
+            });
+          }
+          return r;
+        })
+        .catch(function () {
+          return cacheado;
+        });
       return cacheado || rede;
     })
   );
@@ -79,14 +101,20 @@ self.addEventListener('fetch', function (e) {
 
 /* ---------- checagem de lembretes ---------- */
 function checarLembretes() {
-  return self.RotinaStore.carregar().then(function (state) {
-    if (!state.config.notificacoes) return 0;
-    return self.RotinaNotify.disparar(state, new Date(), self.registration)
-      .then(function (n) {
-        if (n > 0) return self.RotinaStore.salvar(state).then(function () { return n; });
+  return self.RotinaStore.carregar()
+    .then(function (state) {
+      if (!state.config.notificacoes) return 0;
+      return self.RotinaNotify.disparar(state, new Date(), self.registration).then(function (n) {
+        if (n > 0)
+          return self.RotinaStore.salvar(state).then(function () {
+            return n;
+          });
         return n;
       });
-  }).catch(function () { return 0; });
+    })
+    .catch(function () {
+      return 0;
+    });
 }
 
 self.addEventListener('periodicsync', function (e) {
@@ -102,12 +130,14 @@ self.addEventListener('message', function (e) {
   if (d.tipo === 'checar') e.waitUntil(checarLembretes());
   if (d.tipo === 'pular-espera') self.skipWaiting();
   if (d.tipo === 'teste') {
-    e.waitUntil(self.registration.showNotification('🔔 Notificações ligadas', {
-      body: 'É assim que os lembretes vão aparecer.',
-      icon: 'icons/icon-192.png',
-      badge: 'icons/icon-192.png',
-      tag: 'teste'
-    }));
+    e.waitUntil(
+      self.registration.showNotification('🔔 Notificações ligadas', {
+        body: 'É assim que os lembretes vão aparecer.',
+        icon: 'icons/icon-192.png',
+        badge: 'icons/icon-192.png',
+        tag: 'teste'
+      })
+    );
   }
 });
 

@@ -8,9 +8,30 @@
 
   /* ---------- normalização preservando o comprimento ---------- */
   var ACENTOS = {
-    'á':'a','à':'a','ã':'a','â':'a','ä':'a','é':'e','è':'e','ê':'e','ë':'e',
-    'í':'i','ì':'i','î':'i','ï':'i','ó':'o','ò':'o','õ':'o','ô':'o','ö':'o',
-    'ú':'u','ù':'u','û':'u','ü':'u','ç':'c','ñ':'n'
+    á: 'a',
+    à: 'a',
+    ã: 'a',
+    â: 'a',
+    ä: 'a',
+    é: 'e',
+    è: 'e',
+    ê: 'e',
+    ë: 'e',
+    í: 'i',
+    ì: 'i',
+    î: 'i',
+    ï: 'i',
+    ó: 'o',
+    ò: 'o',
+    õ: 'o',
+    ô: 'o',
+    ö: 'o',
+    ú: 'u',
+    ù: 'u',
+    û: 'u',
+    ü: 'u',
+    ç: 'c',
+    ñ: 'n'
   };
 
   function normalizar(txt) {
@@ -18,40 +39,89 @@
     var s = String(txt).toLowerCase();
     for (var i = 0; i < s.length; i++) {
       var c = s[i];
-      out += (ACENTOS[c] || c);
+      out += ACENTOS[c] || c;
     }
     return out;
   }
 
   var NUM_PALAVRA = {
-    'um':1,'uma':1,'dois':2,'duas':2,'tres':3,'quatro':4,'cinco':5,'seis':6,
-    'sete':7,'oito':8,'nove':9,'dez':10,'onze':11,'doze':12,'quinze':15,
-    'vinte':20,'trinta':30,'quarenta':40,'cinquenta':50,'meia':0.5,'meio':0.5
+    um: 1,
+    uma: 1,
+    dois: 2,
+    duas: 2,
+    tres: 3,
+    quatro: 4,
+    cinco: 5,
+    seis: 6,
+    sete: 7,
+    oito: 8,
+    nove: 9,
+    dez: 10,
+    onze: 11,
+    doze: 12,
+    quinze: 15,
+    vinte: 20,
+    trinta: 30,
+    quarenta: 40,
+    cinquenta: 50,
+    meia: 0.5,
+    meio: 0.5
   };
 
   var DIAS_MAP = {
-    'domingo':0,'dom':0,
-    'segunda':1,'seg':1,
-    'terca':2,'ter':2,
-    'quarta':3,'qua':3,
-    'quinta':4,'qui':4,
-    'sexta':5,'sex':5,
-    'sabado':6,'sab':6
+    domingo: 0,
+    dom: 0,
+    segunda: 1,
+    seg: 1,
+    terca: 2,
+    ter: 2,
+    quarta: 3,
+    qua: 3,
+    quinta: 4,
+    qui: 4,
+    sexta: 5,
+    sex: 5,
+    sabado: 6,
+    sab: 6
   };
 
   var MESES = {
-    'janeiro':0,'jan':0,'fevereiro':1,'fev':1,'marco':2,'mar':2,'abril':3,'abr':3,
-    'maio':4,'mai':4,'junho':5,'jun':5,'julho':6,'jul':6,'agosto':7,'ago':7,
-    'setembro':8,'set':8,'outubro':9,'out':9,'novembro':10,'nov':10,
-    'dezembro':11,'dez':11
+    janeiro: 0,
+    jan: 0,
+    fevereiro: 1,
+    fev: 1,
+    marco: 2,
+    mar: 2,
+    abril: 3,
+    abr: 3,
+    maio: 4,
+    mai: 4,
+    junho: 5,
+    jun: 5,
+    julho: 6,
+    jul: 6,
+    agosto: 7,
+    ago: 7,
+    setembro: 8,
+    set: 8,
+    outubro: 9,
+    out: 9,
+    novembro: 10,
+    nov: 10,
+    dezembro: 11,
+    dez: 11
   };
 
-  var NOMES_DIA = ['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
-  var NOMES_DIA_CURTO = ['dom','seg','ter','qua','qui','sex','sáb'];
+  var NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+  var NOMES_DIA_CURTO = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
   /* ---------- marcação de trechos consumidos ---------- */
-  function Marcas() { this.spans = []; }
-  Marcas.prototype.add = function (i, len) { if (i >= 0 && len > 0) this.spans.push([i, i + len]); };
+  function Marcas() {
+    this.spans = [];
+  }
+  Marcas.prototype.add = function (i, len) {
+    if (i >= 0 && len > 0) this.spans.push([i, i + len]);
+  };
   Marcas.prototype.limpar = function (original) {
     var chars = original.split('');
     for (var k = 0; k < this.spans.length; k++) {
@@ -60,20 +130,32 @@
     return chars.join('');
   };
 
-  function pad2(x) { return String(x).padStart(2, '0'); }
-  function zerar(d) { var x = new Date(d.getTime()); x.setHours(0, 0, 0, 0); return x; }
+  function pad2(x) {
+    return String(x).padStart(2, '0');
+  }
+  function zerar(d) {
+    var x = new Date(d.getTime());
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
 
   /* ---------- extração de hora ---------- */
   function extrairHora(n, marcas) {
     var m;
     m = /\bmeio[\s-]?dia\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return { h: 12, m: 0 }; }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return { h: 12, m: 0 };
+    }
     m = /\bmeia[\s-]?noite\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return { h: 0, m: 0 }; }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return { h: 0, m: 0 };
+    }
 
     var pm = /\b(da|de|à|a)\s+(tarde|noite)\b/.exec(n);
     var am = /\b(da|de|à|a)\s+(manha|madrugada)\b/.exec(n);
-    var periodo = pm ? 'pm' : (am ? 'am' : null);
+    var periodo = pm ? 'pm' : am ? 'am' : null;
 
     // 15:30 | 15h30 | 15hs30
     m = /(^|[^\d])(\d{1,2})\s*(?::|h|hs)\s*(\d{2})\b/.exec(n);
@@ -88,7 +170,10 @@
       return ajustar(+m[2], 0, periodo, pm, am, marcas);
     }
     // às 9 | as 19 | pras 8
-    m = /\b(?:as|à|a|pras|pra|para as)\s+(\d{1,2})(?!\d)(?!\s*(?:min|ml|g\b|kg|dias|semanas|copos))/.exec(n);
+    m =
+      /\b(?:as|à|a|pras|pra|para as)\s+(\d{1,2})(?!\d)(?!\s*(?:min|ml|g\b|kg|dias|semanas|copos))/.exec(
+        n
+      );
     if (m) {
       marcas.add(m.index, m[0].length);
       return ajustar(+m[1], 0, periodo, pm, am, marcas);
@@ -107,8 +192,10 @@
 
   /* ---------- dias da semana presentes no texto ---------- */
   function tokensDia(n) {
-    var re = /\b(domingos?|segundas?-feiras?|segundas?|tercas?-feiras?|tercas?|quartas?-feiras?|quartas?|quintas?-feiras?|quintas?|sextas?-feiras?|sextas?|sabados?|dom|seg|ter|qua|qui|sex|sab)\b/g;
-    var achados = [], m;
+    var re =
+      /\b(domingos?|segundas?-feiras?|segundas?|tercas?-feiras?|tercas?|quartas?-feiras?|quartas?|quintas?-feiras?|quintas?|sextas?-feiras?|sextas?|sabados?|dom|seg|ter|qua|qui|sex|sab)\b/g;
+    var achados = [],
+      m;
     while ((m = re.exec(n)) !== null) {
       var tok = m[1];
       if (tok === 'ter' && /^\s+(que|de|certeza|uns|umas)\b/.test(n.slice(m.index + 3))) continue;
@@ -123,23 +210,38 @@
   function extrairData(n, agora, marcas) {
     var m, d;
     m = /\bdepois\s+de\s+amanha\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return diasDepois(agora, 2); }
-    m = /\bamanha\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return diasDepois(agora, 1); }
-    m = /\b(hoje|hj)\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return diasDepois(agora, 0); }
-    m = /\bontem\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return diasDepois(agora, -1); }
-
-    m = /\b(?:daqui\s+a|daqui\s+há|em|dentro\s+de)\s+(\d+|um|uma|dois|duas|tres)\s+(dias?|semanas?|mes|meses)\b/.exec(n);
     if (m) {
       marcas.add(m.index, m[0].length);
-      var q = /^\d+$/.test(m[1]) ? +m[1] : (NUM_PALAVRA[m[1]] || 1);
-      var mult = /semana/.test(m[2]) ? 7 : (/mes/.test(m[2]) ? 30 : 1);
+      return diasDepois(agora, 2);
+    }
+    m = /\bamanha\b/.exec(n);
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return diasDepois(agora, 1);
+    }
+    m = /\b(hoje|hj)\b/.exec(n);
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return diasDepois(agora, 0);
+    }
+    m = /\bontem\b/.exec(n);
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return diasDepois(agora, -1);
+    }
+
+    m =
+      /\b(?:daqui\s+a|daqui\s+há|em|dentro\s+de)\s+(\d+|um|uma|dois|duas|tres)\s+(dias?|semanas?|mes|meses)\b/.exec(
+        n
+      );
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      var q = /^\d+$/.test(m[1]) ? +m[1] : NUM_PALAVRA[m[1]] || 1;
+      var mult = /semana/.test(m[2]) ? 7 : /mes/.test(m[2]) ? 30 : 1;
       return diasDepois(agora, q * mult);
     }
 
-    m = /\b(?:dia\s+)?(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/.exec(n);
+    m = /\b(?:dia\s+)?(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b/.exec(n);
     if (m) {
       marcas.add(m.index, m[0].length);
       var ano = m[3] ? (+m[3] < 100 ? 2000 + +m[3] : +m[3]) : agora.getFullYear();
@@ -149,7 +251,7 @@
     }
 
     m = /\b(?:dia\s+)?(\d{1,2})\s+de\s+([a-z]+)\b/.exec(n);
-    if (m && (m[2] in MESES)) {
+    if (m && m[2] in MESES) {
       marcas.add(m.index, m[0].length);
       d = new Date(agora.getFullYear(), MESES[m[2]], +m[1], 12, 0, 0, 0);
       if (d < zerar(agora)) d.setFullYear(agora.getFullYear() + 1);
@@ -165,7 +267,10 @@
     }
 
     m = /\b(semana\s+que\s+vem|proxima\s+semana)\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return diasDepois(agora, 7); }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return diasDepois(agora, 7);
+    }
 
     var dias = tokensDia(n);
     if (dias.length === 1 && !/\b(toda|todas|todo|todos)\b/.test(n)) {
@@ -197,38 +302,82 @@
 
   /* ---------- recorrência ---------- */
   function unicos(arr) {
-    return arr.filter(function (v, i, a) { return a.indexOf(v) === i; }).sort(function (a, b) { return a - b; });
+    return arr
+      .filter(function (v, i, a) {
+        return a.indexOf(v) === i;
+      })
+      .sort(function (a, b) {
+        return a - b;
+      });
   }
 
   function extrairRecorrencia(n, marcas) {
     var m;
     m = /\b(todo\s+dia|todos\s+os\s+dias|diariamente|diario)\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return { tipo: 'diaria' }; }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return { tipo: 'diaria' };
+    }
     m = /\b(dias\s+uteis|de\s+segunda\s+a\s+sexta|seg\s+a\s+sex)\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return { tipo: 'semanal', dias: [1, 2, 3, 4, 5] }; }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return { tipo: 'semanal', dias: [1, 2, 3, 4, 5] };
+    }
     m = /\b(fim\s+de\s+semana|fins\s+de\s+semana|finais\s+de\s+semana)\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return { tipo: 'semanal', dias: [0, 6] }; }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return { tipo: 'semanal', dias: [0, 6] };
+    }
 
     var temTodo = /\b(todas\s+as|todos\s+os|toda|todo)\b/.exec(n);
     var dias = tokensDia(n);
     if (temTodo && dias.length >= 1) {
       marcas.add(temTodo.index, temTodo[0].length);
-      dias.forEach(function (a) { marcas.add(a.index, a.len); });
+      dias.forEach(function (a) {
+        marcas.add(a.index, a.len);
+      });
       limparConectores(n, dias, marcas);
-      return { tipo: 'semanal', dias: unicos(dias.map(function (a) { return a.dia; })) };
+      return {
+        tipo: 'semanal',
+        dias: unicos(
+          dias.map(function (a) {
+            return a.dia;
+          })
+        )
+      };
     }
     if (dias.length >= 2) {
-      dias.forEach(function (a) { marcas.add(a.index, a.len); });
+      dias.forEach(function (a) {
+        marcas.add(a.index, a.len);
+      });
       limparConectores(n, dias, marcas);
-      return { tipo: 'semanal', dias: unicos(dias.map(function (a) { return a.dia; })) };
+      return {
+        tipo: 'semanal',
+        dias: unicos(
+          dias.map(function (a) {
+            return a.dia;
+          })
+        )
+      };
     }
     return null;
   }
 
   function limparConectores(n, dias, marcas) {
-    var min = Math.min.apply(null, dias.map(function (a) { return a.index; }));
-    var max = Math.max.apply(null, dias.map(function (a) { return a.index + a.len; }));
-    var re = /(\se\s|,\s?)/g, c;
+    var min = Math.min.apply(
+      null,
+      dias.map(function (a) {
+        return a.index;
+      })
+    );
+    var max = Math.max.apply(
+      null,
+      dias.map(function (a) {
+        return a.index + a.len;
+      })
+    );
+    var re = /(\se\s|,\s?)/g,
+      c;
     while ((c = re.exec(n)) !== null) {
       if (c.index >= min && c.index < max) marcas.add(c.index, c[0].length);
     }
@@ -238,11 +387,20 @@
   function extrairDuracao(n, marcas) {
     var m;
     m = /\b(\d{1,2})\s*h(?:oras?)?\s*(\d{1,2})\s*(?:min|minutos?)?\b/.exec(n);
-    if (m && +m[2] < 60) { marcas.add(m.index, m[0].length); return (+m[1]) * 60 + (+m[2]); }
+    if (m && +m[2] < 60) {
+      marcas.add(m.index, m[0].length);
+      return +m[1] * 60 + +m[2];
+    }
     m = /\b(\d{1,3})\s*(?:min|minutos|minuto)\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return +m[1]; }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return +m[1];
+    }
     m = /\b(\d{1,2})\s*(?:h|horas|hora)\b/.exec(n);
-    if (m) { marcas.add(m.index, m[0].length); return (+m[1]) * 60; }
+    if (m) {
+      marcas.add(m.index, m[0].length);
+      return +m[1] * 60;
+    }
     m = /\b(meia|uma|um|dois|duas|tres|quatro)\s+(horas?|minutos?)\b/.exec(n);
     if (m) {
       marcas.add(m.index, m[0].length);
@@ -261,7 +419,7 @@
     if (m) return Math.round(parseFloat(m[1].replace(',', '.')) * 1000);
     m = /\b(\d{1,2}|um|uma|dois|duas|tres|meio|meia)\s*(copos?|garrafas?)\b/.exec(n);
     if (m) {
-      var q = /^\d+$/.test(m[1]) ? +m[1] : (NUM_PALAVRA[m[1]] || 1);
+      var q = /^\d+$/.test(m[1]) ? +m[1] : NUM_PALAVRA[m[1]] || 1;
       var base = /garrafa/.test(m[2]) ? 500 : copoPadrao;
       return Math.round(q * base);
     }
@@ -280,7 +438,9 @@
 
   function limparTitulo(s) {
     var t = ' ' + s + ' ';
-    LIXO.forEach(function (re) { t = t.replace(re, ' '); });
+    LIXO.forEach(function (re) {
+      t = t.replace(re, ' ');
+    });
     t = t.replace(/\s+/g, ' ').trim();
     t = t.replace(/^[,;:.!?\s]+/, '').replace(/[,;:\s]+$/, '');
     t = t.replace(/\s+(as|às|na|no|em|de|do|da|pra|para|com|a|o)$/i, '');
@@ -305,17 +465,25 @@
   }
 
   function acharDivisao(n, divisao) {
-    var melhor = null, maxPontos = 0;
+    var melhor = null,
+      maxPontos = 0;
     (divisao || []).forEach(function (d) {
       var pontos = 0;
-      var termos = normalizar(d.foco || '').split(/[^a-z]+/).filter(function (t) { return t.length > 2 && t !== 'com'; });
+      var termos = normalizar(d.foco || '')
+        .split(/[^a-z]+/)
+        .filter(function (t) {
+          return t.length > 2 && t !== 'com';
+        });
       termos.forEach(function (t) {
         var raiz = t.replace(/(es|s)$/, '');
         if (raiz.length > 2 && n.indexOf(raiz) !== -1) pontos++;
       });
       var nomeDiv = normalizar(d.nome || '');
       if (nomeDiv && new RegExp('\\btreino\\s+' + nomeDiv + '\\b').test(n)) pontos += 3;
-      if (pontos > maxPontos) { maxPontos = pontos; melhor = d; }
+      if (pontos > maxPontos) {
+        maxPontos = pontos;
+        melhor = d;
+      }
     });
     return maxPontos > 0 ? melhor : null;
   }
@@ -332,12 +500,15 @@
     var n = normalizar(original);
     var marcas = new Marcas();
 
-    if (/^\s*(ajuda|help|\?|comandos|o que voce faz)\s*[?!.]*\s*$/.test(n)) return { tipo: 'ajuda' };
+    if (/^\s*(ajuda|help|\?|comandos|o que voce faz)\s*[?!.]*\s*$/.test(n))
+      return { tipo: 'ajuda' };
 
     /* --- consultas --- */
-    if (/\b(o que|oque|que)\s+(eu\s+)?(tenho|tem|ta marcado|esta marcado|falta)\b/.test(n) ||
-        /\b(resumo|minha agenda|meu dia|agenda de|como (ta|esta) (meu|o) dia)\b/.test(n) ||
-        /^\s*(hoje|agenda|amanha|semana|resumo)\s*[?!.]*\s*$/.test(n)) {
+    if (
+      /\b(o que|oque|que)\s+(eu\s+)?(tenho|tem|ta marcado|esta marcado|falta)\b/.test(n) ||
+      /\b(resumo|minha agenda|meu dia|agenda de|como (ta|esta) (meu|o) dia)\b/.test(n) ||
+      /^\s*(hoje|agenda|amanha|semana|resumo)\s*[?!.]*\s*$/.test(n)
+    ) {
       var escopo = 'hoje';
       if (/\bamanha\b/.test(n)) escopo = 'amanha';
       else if (/\bsemana\b/.test(n)) escopo = 'semana';
@@ -346,17 +517,26 @@
     if (/\b(o que falta|falta o que|ainda falta|pendencias|pendencia|pendente)\b/.test(n)) {
       return { tipo: 'consulta', escopo: 'pendente' };
     }
-    if (/\b(estatisticas|estatistica|progresso|sequencias|sequencia|streaks|streak|como fui)\b/.test(n)) {
+    if (
+      /\b(estatisticas|estatistica|progresso|sequencias|sequencia|streaks|streak|como fui)\b/.test(
+        n
+      )
+    ) {
       return { tipo: 'consulta', escopo: 'stats' };
     }
-    if (/\b(qual|que)\s+(e\s+)?(o\s+)?treino\b/.test(n) || /\btreino de hoje\b/.test(n) || /\btreino de amanha\b/.test(n)) {
+    if (
+      /\b(qual|que)\s+(e\s+)?(o\s+)?treino\b/.test(n) ||
+      /\btreino de hoje\b/.test(n) ||
+      /\btreino de amanha\b/.test(n)
+    ) {
       return { tipo: 'consulta', escopo: 'treino' };
     }
 
     var negado = /\b(nao|ainda nao|esqueci)\b/.test(n);
 
     /* --- água --- */
-    var recipiente = /\b(um|uma|dois|duas|tres|meio|meia|\d{1,2})\s*(copos?|litros?|garrafas?)\b/.test(n);
+    var recipiente =
+      /\b(um|uma|dois|duas|tres|meio|meia|\d{1,2})\s*(copos?|litros?|garrafas?)\b/.test(n);
     if (/\bagua\b/.test(n) || /\b\d{2,4}\s*ml\b/.test(n) || recipiente) {
       if (/\b(meta|definir|configurar|mudar)\b/.test(n)) {
         return { tipo: 'config', campo: 'metaAgua', valor: extrairAgua(n, 2500) };
@@ -392,7 +572,12 @@
       if (registrou && !negado) {
         return { tipo: 'treino', divisao: divisaoAchada, data: dataTr || agora };
       }
-      if (!futuroTr && !negado && !/\b(vou|marcar|agendar|lembr)\b/.test(n) && !extrairHora(n, new Marcas())) {
+      if (
+        !futuroTr &&
+        !negado &&
+        !/\b(vou|marcar|agendar|lembr)\b/.test(n) &&
+        !extrairHora(n, new Marcas())
+      ) {
         return { tipo: 'treino', divisao: divisaoAchada, data: dataTr || agora };
       }
     }
@@ -401,13 +586,23 @@
     var hab = acharHabito(n, ctx.habitos);
     // "tomei os remédios" = registrar. "me lembra de tomar remédio às 22h" = compromisso.
     var confirmou = /\b(tomei|fiz|ja|feito|concluido|apliquei|usei|acabei)\b/.test(n);
-    var temQuando = !!extrairHora(n, new Marcas()) || !!extrairData(n, agora, new Marcas()) || !!extrairRecorrencia(n, new Marcas());
+    var temQuando =
+      !!extrairHora(n, new Marcas()) ||
+      !!extrairData(n, agora, new Marcas()) ||
+      !!extrairRecorrencia(n, new Marcas());
     var infinitivo = /\b(tomar|fazer|marcar|nao)\b/.test(n);
     if (hab && !/\blembr/.test(n) && (confirmou || (infinitivo && !temQuando))) {
       var quant = null;
-      var mq = /\b(\d+(?:[.,]\d+)?)\s*(g|gr|gramas?|ml|comprimidos?|caps|capsulas?|x|vezes)\b/.exec(n);
+      var mq = /\b(\d+(?:[.,]\d+)?)\s*(g|gr|gramas?|ml|comprimidos?|caps|capsulas?|x|vezes)\b/.exec(
+        n
+      );
       if (mq) quant = parseFloat(mq[1].replace(',', '.'));
-      return { tipo: 'habito', habito: hab, valor: negado ? 0 : (quant !== null ? quant : true), desmarcar: negado };
+      return {
+        tipo: 'habito',
+        habito: hab,
+        valor: negado ? 0 : quant !== null ? quant : true,
+        desmarcar: negado
+      };
     }
 
     /* --- criar hábito --- */
@@ -435,7 +630,9 @@
     // duração só no que sobrou: senão "15h" (horário) vira 900 minutos
     var marcasDur = new Marcas();
     var dur = extrairDuracao(marcas.limpar(n), marcasDur);
-    marcasDur.spans.forEach(function (s) { marcas.spans.push(s); });
+    marcasDur.spans.forEach(function (s) {
+      marcas.spans.push(s);
+    });
 
     if (hora || data || rec) {
       var inicio;
@@ -446,7 +643,8 @@
       }
       if (hora) inicio.setHours(hora.h, hora.m, 0, 0);
       else inicio.setHours(9, 0, 0, 0);
-      if (!data && !rec && hora && inicio.getTime() < agora.getTime()) inicio.setDate(inicio.getDate() + 1);
+      if (!data && !rec && hora && inicio.getTime() < agora.getTime())
+        inicio.setDate(inicio.getDate() + 1);
 
       var titulo = limparTitulo(marcas.limpar(original));
       var ehLembrete = /\blembr/.test(n) || !titulo;

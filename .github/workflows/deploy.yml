@@ -15,7 +15,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  testar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Formatação
+        run: npm run format:check
+      - name: Testes do NLP
+        run: npm test
+
+  testar-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Servidor local
+        run: |
+          python3 -m http.server 8899 &
+          for i in $(seq 1 20); do curl -sf http://localhost:8899/index.html > /dev/null && break; sleep 0.5; done
+      - name: Testes E2E
+        run: npm run test:e2e
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots-e2e
+          path: testes/*.png
+          if-no-files-found: ignore
+
   publicar:
+    needs: [testar, testar-e2e]
     runs-on: ubuntu-latest
     environment:
       name: github-pages

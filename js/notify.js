@@ -5,27 +5,37 @@
 (function (root) {
   'use strict';
 
-  var S = root.RotinaStore;
-
-  function pad(n) { return String(n).padStart(2, '0'); }
-  function isoData(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function pad(n) {
+    return String(n).padStart(2, '0');
+  }
+  function isoData(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
   function comHora(base, hhmm) {
     var p = String(hhmm || '09:00').split(':');
     var d = new Date(base.getTime());
     d.setHours(+p[0] || 0, +p[1] || 0, 0, 0);
     return d;
   }
-  function mesmoDia(a, b) { return isoData(a) === isoData(b); }
-  function zerar(d) { var x = new Date(d.getTime()); x.setHours(0, 0, 0, 0); return x; }
+  function mesmoDia(a, b) {
+    return isoData(a) === isoData(b);
+  }
+  function zerar(d) {
+    var x = new Date(d.getTime());
+    x.setHours(0, 0, 0, 0);
+    return x;
+  }
 
   /* ---------- ocorrências de um evento em um dia ---------- */
   function ocorreEm(ev, dia) {
     var inicio = new Date(ev.inicio);
-    var d0 = zerar(inicio), dd = zerar(dia);
+    var d0 = zerar(inicio),
+      dd = zerar(dia);
     if (dd < d0) return null;
     var rec = ev.recorrencia;
     if (!rec) return mesmoDia(inicio, dia) ? new Date(inicio) : null;
-    if (rec.tipo === 'diaria') return comHora(dia, pad(inicio.getHours()) + ':' + pad(inicio.getMinutes()));
+    if (rec.tipo === 'diaria')
+      return comHora(dia, pad(inicio.getHours()) + ':' + pad(inicio.getMinutes()));
     if (rec.tipo === 'semanal' && rec.dias && rec.dias.indexOf(dia.getDay()) !== -1) {
       return comHora(dia, pad(inicio.getHours()) + ':' + pad(inicio.getMinutes()));
     }
@@ -40,7 +50,9 @@
       var q = ocorreEm(ev, dia);
       if (q) lista.push({ ev: ev, quando: q });
     });
-    lista.sort(function (a, b) { return a.quando - b.quando; });
+    lista.sort(function (a, b) {
+      return a.quando - b.quando;
+    });
     return lista;
   }
 
@@ -58,7 +70,12 @@
     var out = [];
     var cfg = state.config;
     var dataStr = isoData(dia);
-    var reg = (state.registros || {})[dataStr] || { habitos: {}, agua: 0, estudoMin: 0, treinos: [] };
+    var reg = (state.registros || {})[dataStr] || {
+      habitos: {},
+      agua: 0,
+      estudoMin: 0,
+      treinos: []
+    };
     var dow = dia.getDay();
 
     // hábitos
@@ -71,9 +88,15 @@
         chave: 'hab:' + h.id + ':' + dataStr,
         quando: comHora(dia, h.horario),
         titulo: (h.emoji || '✅') + ' ' + h.nome,
-        corpo: h.tipo === 'quantidade'
-          ? 'Hora de tomar ' + (h.meta || '') + (h.unidade || '') + ' de ' + h.nome.toLowerCase() + '.'
-          : 'Ainda não marcou hoje. Bora?',
+        corpo:
+          h.tipo === 'quantidade'
+            ? 'Hora de tomar ' +
+              (h.meta || '') +
+              (h.unidade || '') +
+              ' de ' +
+              h.nome.toLowerCase() +
+              '.'
+            : 'Ainda não marcou hoje. Bora?',
         tag: 'habito-' + h.id
       });
     });
@@ -90,7 +113,8 @@
           chave: 'agua:' + dataStr + ':' + pad(t.getHours()) + pad(t.getMinutes()),
           quando: new Date(t.getTime()),
           titulo: '💧 Água',
-          corpo: 'Você está em ' + (reg.agua || 0) + ' ml de ' + cfg.metaAgua + ' ml. Bebe um copo.',
+          corpo:
+            'Você está em ' + (reg.agua || 0) + ' ml de ' + cfg.metaAgua + ' ml. Bebe um copo.',
           tag: 'agua'
         });
         t = new Date(t.getTime() + passo * 60000);
@@ -106,7 +130,8 @@
         chave: 'treino:' + d.id + ':' + dataStr,
         quando: comHora(dia, d.horario || state.treino.horario),
         titulo: '🏋️ Treino ' + d.nome,
-        corpo: 'Você ainda não fez ' + (d.foco || 'seu treino').toLowerCase() + '. Vamos pra academia?',
+        corpo:
+          'Você ainda não fez ' + (d.foco || 'seu treino').toLowerCase() + '. Vamos pra academia?',
         tag: 'treino'
       });
     }
@@ -119,7 +144,10 @@
         chave: 'estudo:' + dataStr,
         quando: alvo,
         titulo: '📚 Estudo',
-        corpo: 'Faltam ' + (cfg.metaEstudoMin - (reg.estudoMin || 0)) + ' min pra bater sua meta de hoje.',
+        corpo:
+          'Faltam ' +
+          (cfg.metaEstudoMin - (reg.estudoMin || 0)) +
+          ' min pra bater sua meta de hoje.',
         tag: 'estudo'
       });
     }
@@ -135,12 +163,17 @@
         chave: 'ev:' + o.ev.id + ':' + dataStr,
         quando: quando,
         titulo: (o.ev.subtipo === 'lembrete' ? '🔔 ' : '📅 ') + o.ev.titulo,
-        corpo: alerta > 0 ? 'Começa às ' + quandoTxt + ' (em ' + alerta + ' min).' : 'Agora, às ' + quandoTxt + '.',
+        corpo:
+          alerta > 0
+            ? 'Começa às ' + quandoTxt + ' (em ' + alerta + ' min).'
+            : 'Agora, às ' + quandoTxt + '.',
         tag: 'evento-' + o.ev.id
       });
     });
 
-    out.sort(function (a, b) { return a.quando - b.quando; });
+    out.sort(function (a, b) {
+      return a.quando - b.quando;
+    });
     return out;
   }
 
@@ -171,10 +204,12 @@
   function disparar(state, agora, reg) {
     var lista = pendentes(state, agora);
     if (!lista.length) return Promise.resolve(0);
-    return Promise.all(lista.map(function (l) {
-      state.notificado[l.chave] = Date.now();
-      return mostrar(reg, l).catch(function () { });
-    })).then(function () {
+    return Promise.all(
+      lista.map(function (l) {
+        state.notificado[l.chave] = Date.now();
+        return mostrar(reg, l).catch(function () {});
+      })
+    ).then(function () {
       limparNotificado(state);
       return lista.length;
     });
