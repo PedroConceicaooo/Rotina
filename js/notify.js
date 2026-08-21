@@ -5,9 +5,13 @@
 (function (root) {
   'use strict';
 
+  /* Estado/Evento/DivisaoTreino/Lembrete são globais ambientes, definidos
+     em js/types.d.ts (só VS Code, zero runtime) */
+
   function pad(n) {
     return String(n).padStart(2, '0');
   }
+  /** @param {Date} d @returns {string} 'YYYY-MM-DD' */
   function isoData(d) {
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
@@ -27,6 +31,11 @@
   }
 
   /* ---------- ocorrências de um evento em um dia ---------- */
+  /**
+   * @param {Evento} ev
+   * @param {Date} dia
+   * @returns {Date|null} horário em que o evento ocorre nesse dia, ou null se não ocorre
+   */
   function ocorreEm(ev, dia) {
     var inicio = new Date(ev.inicio);
     var d0 = zerar(inicio),
@@ -43,6 +52,11 @@
   }
 
   /* ---------- eventos de um dia, ordenados ---------- */
+  /**
+   * @param {Estado} state
+   * @param {Date} dia
+   * @returns {Array<{ev: Evento, quando: Date}>}
+   */
   function eventosDoDia(state, dia) {
     var lista = [];
     (state.eventos || []).forEach(function (ev) {
@@ -51,12 +65,17 @@
       if (q) lista.push({ ev: ev, quando: q });
     });
     lista.sort(function (a, b) {
-      return a.quando - b.quando;
+      return a.quando.getTime() - b.quando.getTime();
     });
     return lista;
   }
 
   /* ---------- divisão de treino prevista para o dia ---------- */
+  /**
+   * @param {Estado} state
+   * @param {Date} dia
+   * @returns {DivisaoTreino[]|null}
+   */
   function treinoDoDia(state, dia) {
     var dow = dia.getDay();
     var achados = (state.treino.divisao || []).filter(function (d) {
@@ -66,6 +85,11 @@
   }
 
   /* ---------- lembretes previstos para o dia ---------- */
+  /**
+   * @param {Estado} state
+   * @param {Date} dia
+   * @returns {Lembrete[]}
+   */
   function lembretesDoDia(state, dia) {
     var out = [];
     var cfg = state.config;
@@ -74,7 +98,8 @@
       habitos: {},
       agua: 0,
       estudoMin: 0,
-      treinos: []
+      treinos: [],
+      eventosFeitos: []
     };
     var dow = dia.getDay();
 
@@ -172,12 +197,18 @@
     });
 
     out.sort(function (a, b) {
-      return a.quando - b.quando;
+      return a.quando.getTime() - b.quando.getTime();
     });
     return out;
   }
 
   /* ---------- o que está vencido e ainda não notificado ---------- */
+  /**
+   * @param {Estado} state
+   * @param {Date} agora
+   * @param {number} [toleranciaMin] janela pra trás em que um lembrete vencido ainda conta (padrão 45)
+   * @returns {Lembrete[]}
+   */
   function pendentes(state, agora, toleranciaMin) {
     toleranciaMin = toleranciaMin || 45;
     var limiteInferior = new Date(agora.getTime() - toleranciaMin * 60000);
@@ -189,18 +220,30 @@
   }
 
   /* ---------- disparo ---------- */
+  /** @param {ServiceWorkerRegistration} reg @param {Lembrete} l */
   function mostrar(reg, l) {
-    return reg.showNotification(l.titulo, {
-      body: l.corpo,
-      icon: 'icons/icon-192.png',
-      badge: 'icons/icon-192.png',
-      tag: l.tag,
-      renotify: true,
-      requireInteraction: false,
-      data: { chave: l.chave, url: './index.html' }
-    });
+    return reg.showNotification(
+      l.titulo,
+      // 'renotify' é suportado por todo navegador relevante, só falta na lib do TS
+      /** @type {NotificationOptions} */ ({
+        body: l.corpo,
+        icon: 'icons/icon-192.png',
+        badge: 'icons/icon-192.png',
+        tag: l.tag,
+        renotify: true,
+        requireInteraction: false,
+        data: { chave: l.chave, url: './index.html' }
+      })
+    );
   }
 
+  /**
+   * @param {Estado} state
+   * @param {Date} agora
+   * @param {ServiceWorkerRegistration} reg
+   * @param {number} [toleranciaMin]
+   * @returns {Promise<number>} quantos lembretes foram disparados
+   */
   function disparar(state, agora, reg, toleranciaMin) {
     var lista = pendentes(state, agora, toleranciaMin);
     if (!lista.length) return Promise.resolve(0);

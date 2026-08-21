@@ -10,6 +10,10 @@
   var STORE = 'kv';
   var KEY = 'state';
 
+  /* os tipos Estado/Habito/DivisaoTreino/Evento/RegistroDia/Config são
+     globais ambientes, definidos em js/types.d.ts (só VS Code, zero
+     runtime) */
+
   /* ---------- IndexedDB mínimo ---------- */
   function openDB() {
     return new Promise(function (resolve, reject) {
@@ -27,6 +31,7 @@
     });
   }
 
+  /** @param {string} key @returns {Promise<*>} */
   function idbGet(key) {
     return openDB().then(function (db) {
       return new Promise(function (resolve, reject) {
@@ -42,6 +47,7 @@
     });
   }
 
+  /** @param {string} key @param {*} value @returns {Promise<boolean>} */
   function idbSet(key, value) {
     return openDB().then(function (db) {
       return new Promise(function (resolve, reject) {
@@ -58,47 +64,54 @@
   }
 
   /* ---------- utilitários de data ---------- */
+  /** @param {number} n @returns {string} */
   function pad(n) {
     return String(n).padStart(2, '0');
   }
 
+  /** @param {Date} [d] @returns {string} 'YYYY-MM-DD' */
   function iso(d) {
     d = d || new Date();
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
 
+  /** @returns {string} 'YYYY-MM-DD' de hoje */
   function hoje() {
     return iso(new Date());
   }
 
+  /** @param {Date} d @returns {string} 'HH:MM' */
   function hhmm(d) {
     return pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
 
+  /** @param {string} s 'YYYY-MM-DD' @returns {Date} meio-dia local, evita virada de fuso */
   function deISO(s) {
-    // 'YYYY-MM-DD' -> Date local (meio-dia evita fuso)
     var p = String(s).split('-');
     return new Date(+p[0], +p[1] - 1, +p[2], 12, 0, 0, 0);
   }
 
+  /** @param {Date} d @param {number} n @returns {Date} */
   function addDias(d, n) {
     var x = new Date(d.getTime());
     x.setDate(x.getDate() + n);
     return x;
   }
 
+  /** @param {string} str 'HH:MM' @returns {number|null} minutos desde meia-noite */
   function minutosDoDia(str) {
-    // '19:30' -> 1170
     if (!str) return null;
     var p = String(str).split(':');
     return +p[0] * 60 + +(p[1] || 0);
   }
 
+  /** @returns {string} id curto e único o bastante pra uso local */
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
   /* ---------- estado padrão ---------- */
+  /** @returns {Estado} */
   function estadoPadrao() {
     return {
       versao: 1,
@@ -211,6 +224,11 @@
   }
 
   /* ---------- registro do dia ---------- */
+  /**
+   * @param {Estado} state
+   * @param {string} [data] 'YYYY-MM-DD', padrão hoje
+   * @returns {RegistroDia}
+   */
   function registroDe(state, data) {
     data = data || hoje();
     if (!state.registros[data]) {
@@ -232,6 +250,11 @@
   }
 
   /* ---------- migração / saneamento ---------- */
+  /**
+   * Migra/completa qualquer estado carregado do disco pro formato atual.
+   * @param {*} s
+   * @returns {Estado}
+   */
   function sanear(s) {
     var base = estadoPadrao();
     if (!s || typeof s !== 'object') return base;
@@ -248,6 +271,7 @@
   }
 
   /* ---------- API pública ---------- */
+  /** @returns {Promise<Estado>} */
   function carregar() {
     return idbGet(KEY)
       .then(function (v) {
@@ -268,6 +292,7 @@
       });
   }
 
+  /** @param {Estado} state @returns {Promise<boolean>} */
   function salvar(state) {
     if (typeof localStorage !== 'undefined') {
       try {

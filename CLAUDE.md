@@ -34,6 +34,9 @@ npm test                           # = node testes/nlp.test.js — 44 casos do i
 npx playwright install chromium    # só na primeira vez
 npx serve . -l 8899 &              # ou: python3 -m http.server 8899 &
 npm run test:e2e                   # = node testes/e2e.js — 25 verificações no navegador contra localhost:8899, screenshots vão pra testes/
+
+# typecheck opcional (JSDoc) — não roda no CI, é só ferramenta de dev
+npm run typecheck                  # = tsc -p jsconfig.json
 ```
 
 Não tem bundler nem etapa de build — é JS vanilla estilo ES5 carregado via
@@ -45,6 +48,20 @@ os globais `RotinaStore`/`RotinaNLP`/`RotinaNotify`/`RotinaApp` por causa do
 padrão de objeto global descrito abaixo) e de formatação em
 `.prettierrc.json` (escopo limitado a `js/`, `sw.js` e `testes/` via
 `.prettierignore` — CSS/HTML/Markdown ficam de fora de propósito).
+
+Tipagem é só JSDoc, sem migrar pra ES Modules nem TypeScript de verdade: os
+tipos dos modelos (`Estado`, `Habito`, `Evento`, `DivisaoTreino`,
+`RegistroDia`, `Config`, `Lembrete`, `Acao` de `interpretar()`, e a
+augmentation de `window.RotinaStore`/`RotinaNLP`/`RotinaNotify`/`RotinaApp`)
+ficam em `js/types.d.ts` — arquivo ambiente, nunca carregado em runtime nem
+listado em `ARQUIVOS`/`index.html`. `js/store.js`, `js/nlp.js` e
+`js/notify.js` referenciam esses tipos globais direto pelo nome (sem
+`import()`) porque `store.js`/`notify.js` são carregados via `importScripts`
+no `sw.js`, que não aceita sintaxe de módulo ES. `jsconfig.json` +
+`npm run typecheck` validam isso (`app.js`, `nlp.js`, `store.js`,
+`notify.js` — `sw.js` fica de fora porque os globais só-de-service-worker
+como `self.clients`/`caches` colidem com a lib DOM usada pro resto); é
+puramente opt-in, não roda no CI.
 
 ## Arquitetura
 

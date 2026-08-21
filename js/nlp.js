@@ -538,6 +538,11 @@
   }
 
   /* ---------- casamento de hábito / treino ---------- */
+  /**
+   * @param {string} n texto normalizado
+   * @param {Habito[]} habitos
+   * @returns {Habito|null}
+   */
   function acharHabito(n, habitos) {
     var melhor = null;
     (habitos || []).forEach(function (h) {
@@ -575,6 +580,11 @@
     return melhor;
   }
 
+  /**
+   * @param {string} n texto normalizado
+   * @param {DivisaoTreino[]} divisao
+   * @returns {DivisaoTreino|null}
+   */
   function acharDivisao(n, divisao) {
     var melhor = null,
       maxPontos = 0;
@@ -599,10 +609,15 @@
     return maxPontos > 0 ? melhor : null;
   }
 
-  /* ============================================================
-     interpretar(texto, ctx) -> ação
-     ctx: { agora, habitos, divisao, copoPadrao }
-     ============================================================ */
+  /* NlpCtx/Acao/Habito/DivisaoTreino são globais ambientes, definidos em
+     js/types.d.ts (só VS Code, zero runtime) */
+
+  /**
+   * Interpreta uma frase livre em português e devolve a ação que ela pede.
+   * @param {string} texto
+   * @param {NlpCtx} [ctx]
+   * @returns {Acao}
+   */
   function interpretar(texto, ctx) {
     ctx = ctx || {};
     var agora = ctx.agora || new Date();
@@ -619,10 +634,10 @@
       /\b(resumo|minha agenda|meu dia|agenda de|como (ta|esta) (meu|o) dia)\b/.test(n) ||
       /^\s*(hoje|agenda|amanha|semana|resumo)\s*[?!.]*\s*$/.test(n)
     ) {
-      var escopo = 'hoje';
-      if (/\bamanha\b/.test(n)) escopo = 'amanha';
-      else if (/\bsemana\b/.test(n)) escopo = 'semana';
-      return { tipo: 'consulta', escopo: escopo };
+      return {
+        tipo: 'consulta',
+        escopo: /\bamanha\b/.test(n) ? 'amanha' : /\bsemana\b/.test(n) ? 'semana' : 'hoje'
+      };
     }
     if (RE_PENDENCIA.test(n)) {
       return { tipo: 'consulta', escopo: 'pendente' };

@@ -42,6 +42,10 @@
     d.setHours(12, 0, 0, 0);
     return d;
   }
+  /** @param {EventTarget} el @param {string} sel @returns {HTMLElement|null} */
+  function alvo(el, sel) {
+    return el instanceof Element ? /** @type {HTMLElement|null} */ (el.closest(sel)) : null;
+  }
 
   var salvarTimer = null;
   function salvar(reRender) {
@@ -356,7 +360,7 @@
             var quando =
               p.dia.toDateString() === d.toDateString()
                 ? 'hoje'
-                : (p.dia - d) / 86400000 < 2
+                : (p.dia.getTime() - d.getTime()) / 86400000 < 2
                   ? 'amanhã'
                   : nomeDia(p.dia) + ' ' + dataCurta(p.dia);
             return (
@@ -1485,7 +1489,7 @@
     var fr = new FileReader();
     fr.onload = function () {
       try {
-        st = S.sanear(JSON.parse(fr.result));
+        st = S.sanear(JSON.parse(/** @type {string} */ (fr.result)));
         S.salvar(st).then(function () {
           location.reload();
         });
@@ -1532,7 +1536,8 @@
     if (!swReg || !('periodicSync' in swReg) || !navigator.permissions) return;
     try {
       navigator.permissions
-        .query({ name: 'periodic-background-sync' })
+        // 'periodic-background-sync' é real (Chromium/Android), só falta na lib do TS
+        .query(/** @type {*} */ ({ name: 'periodic-background-sync' }))
         .then(function (s) {
           if (s.state === 'granted') {
             swReg.periodicSync
@@ -1692,7 +1697,7 @@
   /* ---------------- eventos globais ---------------- */
   function ligarEventos() {
     $('#nav').addEventListener('click', function (e) {
-      var b = e.target.closest('button[data-vista]');
+      var b = alvo(e.target, 'button[data-vista]');
       if (b) irPara(b.dataset.vista);
     });
 
@@ -1715,9 +1720,9 @@
     $('#btn-agua-config').onclick = modalConfig;
 
     document.addEventListener('click', function (e) {
-      var t = e.target;
+      var t = /** @type {HTMLElement} */ (e.target);
 
-      if (t.closest('[data-fechar]')) {
+      if (alvo(t, '[data-fechar]')) {
         fecharModal();
         return;
       }
@@ -1726,7 +1731,7 @@
         return;
       }
 
-      var bAgua = t.closest('[data-agua]');
+      var bAgua = alvo(t, '[data-agua]');
       if (bAgua) {
         var ml = +bAgua.dataset.agua;
         var tot = addAgua(ml);
@@ -1736,7 +1741,7 @@
         return;
       }
 
-      var bEst = t.closest('[data-estudo]');
+      var bEst = alvo(t, '[data-estudo]');
       if (bEst) {
         var min = +bEst.dataset.estudo;
         var totE = addEstudo(min);
@@ -1744,32 +1749,32 @@
         return;
       }
 
-      var bTog = t.closest('[data-toggle]');
+      var bTog = alvo(t, '[data-toggle]');
       if (bTog) {
         var res = toggleHabito(bTog.dataset.toggle);
         if (res) brinde(res.on ? res.habito.nome + ' ✅' : res.habito.nome + ' desmarcado');
         return;
       }
 
-      var item = t.closest('.item[data-habito]');
-      if (item && !t.closest('[data-toggle]')) {
+      var item = alvo(t, '.item[data-habito]');
+      if (item && !alvo(t, '[data-toggle]')) {
         modalHabito(item.dataset.habito);
         return;
       }
 
-      var bReg = t.closest('[data-registrar]');
+      var bReg = alvo(t, '[data-registrar]');
       if (bReg) {
         modalRegistrarTreino(bReg.dataset.registrar);
         return;
       }
 
-      var bDiv = t.closest('[data-editar-div]');
+      var bDiv = alvo(t, '[data-editar-div]');
       if (bDiv) {
         modalDivisao(bDiv.dataset.editarDiv);
         return;
       }
 
-      var bConc = t.closest('[data-concluir]');
+      var bConc = alvo(t, '[data-concluir]');
       if (bConc) {
         var rr = reg(bConc.dataset.d);
         var idx = rr.eventosFeitos.indexOf(bConc.dataset.concluir);
@@ -1779,26 +1784,26 @@
         return;
       }
 
-      var bEv = t.closest('.evento[data-evento]');
-      if (bEv && !t.closest('[data-concluir]')) {
+      var bEv = alvo(t, '.evento[data-evento]');
+      if (bEv && !alvo(t, '[data-concluir]')) {
         modalEvento(bEv.dataset.evento);
         return;
       }
 
-      var bSug = t.closest('[data-sug]');
+      var bSug = alvo(t, '[data-sug]');
       if (bSug) {
         $('#entrada-chat').value = bSug.dataset.sug;
         $('#form-chat').requestSubmit();
         return;
       }
 
-      var bNotif = t.closest('#btn-ativar-notif');
+      var bNotif = alvo(t, '#btn-ativar-notif');
       if (bNotif) {
         pedirNotificacoes();
         return;
       }
 
-      var bDia = t.closest('.dias-semana button');
+      var bDia = alvo(t, '.dias-semana button');
       if (bDia) {
         bDia.classList.toggle('on');
         return;
