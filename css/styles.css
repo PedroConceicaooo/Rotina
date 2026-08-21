@@ -423,7 +423,7 @@ input[type=checkbox].toggle:focus-visible { outline: 2px solid var(--accent); ou
   text-transform: uppercase; color: var(--muted);
   margin: 18px 0 8px;
 }
-.dia-cab:first-child { margin-top: 0; }
+.dia-grupo:first-child .dia-cab { margin-top: 0; }
 .evento {
   display: flex; gap: 12px; align-items: flex-start;
   background: var(--surface);
@@ -549,4 +549,24 @@ input[type=checkbox].toggle:focus-visible { outline: 2px solid var(--accent); ou
   }
   #vista-hoje.ativa .cartao { margin-bottom: 0; }
   #vista-hoje.ativa #aviso-notif { grid-column: 1 / -1; }
+
+  /* Treino: as divisões (filhas diretas de #treino-conteudo) também vão pra grade */
+  #treino-conteudo {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 14px;
+  }
+  #treino-conteudo .cartao { margin-bottom: 0; }
+
+  /* Agenda: cada dia (cabeçalho + eventos) é um grupo — grade por grupo,
+     não por evento, senão dias diferentes se misturariam na mesma linha */
+  #lista-agenda {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 4px 24px;
+  }
+  #lista-agenda .dia-cab { margin-top: 0; }
+  #lista-agenda .vazio { grid-column: 1 / -1; }
 }

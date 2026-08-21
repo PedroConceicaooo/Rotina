@@ -604,9 +604,13 @@
       totalPorEvento[e.o.ev.id] = (totalPorEvento[e.o.ev.id] || 0) + 1;
     });
 
+    // cada dia vira um grupo (cabeçalho + eventos) fechado num wrapper —
+    // é o que permite a grade de 2 colunas em tela larga sem misturar
+    // eventos de dias diferentes na mesma linha
     var mostrado = {};
     var html = '';
     var diaAtualStr = null;
+    var grupoAberto = false;
     todos.forEach(function (e) {
       if (e.o.ev.recorrencia) {
         if (mostrado[e.o.ev.id]) return;
@@ -615,9 +619,11 @@
       var diaStr = S.iso(e.dia);
       if (diaStr !== diaAtualStr) {
         diaAtualStr = diaStr;
+        if (grupoAberto) html += '</div>';
         var rot =
           e.i === 0 ? 'Hoje' : e.i === 1 ? 'Amanhã' : nomeDia(e.dia) + ', ' + dataCurta(e.dia);
-        html += '<div class="dia-cab">' + rot + '</div>';
+        html += '<div class="dia-grupo"><div class="dia-cab">' + rot + '</div>';
+        grupoAberto = true;
       }
       var rr = st.registros[diaStr];
       var o = e.o;
@@ -660,6 +666,7 @@
         '">✓</button>' +
         '</div>';
     });
+    if (grupoAberto) html += '</div>';
 
     $('#lista-agenda').innerHTML = todos.length
       ? html
