@@ -64,8 +64,14 @@ então o mesmo código roda sem alteração nos dois contextos:
 - **`js/nlp.js`** (`RotinaNlp`) — o interpretador de português.
   `interpretar()` é o ponto de entrada; ele tokeniza texto livre e extrai
   datas, horários, recorrência ("toda terça", "dias úteis"), durações,
-  quantidades de água, e casa nomes de hábitos/treinos. Frases novas entram
-  aqui.
+  quantidades de água, e casa nomes de hábitos/treinos. Os verbos/palavras-
+  chave de cada intenção (água, treino, hábito, pendências…) ficam no objeto
+  `LEXICO` no topo do arquivo — pra ensinar uma palavra nova a uma intenção
+  já existente, edita a lista lá em vez de mexer na regex. `acharHabito()` e
+  a detecção da palavra "água" toleram erro de digitação via
+  `levenshtein()`/`temPalavraFuzzy()` (distância de edição). Frases
+  totalmente novas (nova intenção, nova estrutura de frase) entram direto
+  em `interpretar()`.
 - **`js/notify.js`** (`RotinaNotify`) — lógica de lembrete pura, sem DOM.
   `lembretesDoDia()` calcula todo lembrete previsto pra um dia (hábitos,
   água em intervalos, treino, estudo, eventos da agenda); `pendentes()`

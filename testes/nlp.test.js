@@ -252,6 +252,29 @@ t('me lembra de tomar remédio às 22h', (r) => {
   eq(r.duracaoMin, 0);
 });
 
+/* ---------- fuzzy matching (Levenshtein) ---------- */
+function tlev(nome, a, b, esperado) {
+  try {
+    eq(NLP.levenshtein(a, b), esperado, nome);
+    passou++;
+  } catch (e) {
+    falhou++;
+    falhas.push(`  ${nome}\n    -> ${e.message}`);
+  }
+}
+tlev('levenshtein agua/agua', 'agua', 'agua', 0);
+tlev('levenshtein agua/agia', 'agua', 'agia', 1);
+tlev('levenshtein agua/casa', 'agua', 'casa', 3);
+
+t('tomei 400 de agia', (r) => {
+  eq(r.tipo, 'agua', 'fuzzy: agia deveria virar agua');
+  eq(r.ml, 400);
+});
+t('tomei os remedeos', (r) => {
+  eq(r.tipo, 'habito', 'fuzzy: remedeos deveria casar com Remédios');
+  eq(r.habito.id, 'h1');
+});
+
 console.log(`\n${passou} passaram, ${falhou} falharam\n`);
 if (falhas.length) {
   console.log(falhas.join('\n\n'));

@@ -115,6 +115,93 @@
   var NOMES_DIA = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
   var NOMES_DIA_CURTO = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'];
 
+  /* ---------- dicionário de palavras-chave por intenção ---------- */
+  var LEXICO = {
+    ajuda: ['ajuda', 'help', '\\?', 'comandos', 'o que voce faz'],
+    pendencia: ['o que falta', 'falta o que', 'ainda falta', 'pendencias', 'pendencia', 'pendente'],
+    estatisticas: [
+      'estatisticas',
+      'estatistica',
+      'progresso',
+      'sequencias',
+      'sequencia',
+      'streaks',
+      'streak',
+      'como fui'
+    ],
+    negacao: ['nao', 'ainda nao', 'esqueci'],
+    aguaVerbos: ['bebi', 'tomei', 'bebe', 'beber', 'tomar', 'enchi', 'encher', 'mais'],
+    aguaConfig: ['meta', 'definir', 'configurar', 'mudar'],
+    treinoVerbos: ['treinei', 'treino', 'treinar', 'academia', 'malhei', 'malhar', 'gym'],
+    treinoRegistrou: ['treinei', 'malhei', 'fui', 'fiz', 'acabei'],
+    treinoPular: ['vou', 'marcar', 'agendar', 'lembr'],
+    habitoConfirmou: ['tomei', 'fiz', 'ja', 'feito', 'concluido', 'apliquei', 'usei', 'acabei'],
+    habitoInfinitivo: ['tomar', 'fazer', 'marcar', 'nao']
+  };
+
+  function reAlt(lista) {
+    return new RegExp('\\b(' + lista.join('|') + ')\\b');
+  }
+
+  var RE_AJUDA = new RegExp('^\\s*(' + LEXICO.ajuda.join('|') + ')\\s*[?!.]*\\s*$');
+  var RE_PENDENCIA = reAlt(LEXICO.pendencia);
+  var RE_ESTATISTICAS = reAlt(LEXICO.estatisticas);
+  var RE_NEGACAO = reAlt(LEXICO.negacao);
+  var RE_AGUA_VERBOS = reAlt(LEXICO.aguaVerbos);
+  var RE_AGUA_CONFIG = reAlt(LEXICO.aguaConfig);
+  var RE_TREINO_VERBOS = reAlt(LEXICO.treinoVerbos);
+  var RE_TREINO_REGISTROU = reAlt(LEXICO.treinoRegistrou);
+  var RE_TREINO_PULAR = reAlt(LEXICO.treinoPular);
+  var RE_HABITO_CONFIRMOU = reAlt(LEXICO.habitoConfirmou);
+  var RE_HABITO_INFINITIVO = reAlt(LEXICO.habitoInfinitivo);
+
+  /* ---------- distância de edição (fuzzy matching) ---------- */
+  function levenshtein(a, b) {
+    if (a === b) return 0;
+    var al = a.length,
+      bl = b.length;
+    if (!al) return bl;
+    if (!bl) return al;
+    var prev = new Array(bl + 1);
+    var curr = new Array(bl + 1);
+    for (var j = 0; j <= bl; j++) prev[j] = j;
+    for (var i = 1; i <= al; i++) {
+      curr[0] = i;
+      for (var j2 = 1; j2 <= bl; j2++) {
+        var custo = a.charAt(i - 1) === b.charAt(j2 - 1) ? 0 : 1;
+        curr[j2] = Math.min(prev[j2] + 1, curr[j2 - 1] + 1, prev[j2 - 1] + custo);
+      }
+      var tmp = prev;
+      prev = curr;
+      curr = tmp;
+    }
+    return prev[bl];
+  }
+
+  function distanciaMaxima(len) {
+    if (len <= 4) return 1;
+    if (len <= 8) return 2;
+    return 3;
+  }
+
+  function tokens(n) {
+    return n.split(/[^a-z]+/).filter(Boolean);
+  }
+
+  // tolera erro de digitação: "agua" bate certo, "ágia"/"agiua" também via distância de edição
+  function temPalavraFuzzy(n, alvo) {
+    if (new RegExp('\\b' + alvo + '\\b').test(n)) return true;
+    var max = distanciaMaxima(alvo.length);
+    var toks = tokens(n);
+    for (var i = 0; i < toks.length; i++) {
+      var t = toks[i];
+      if (Math.abs(t.length - alvo.length) > max) continue;
+      if (t.charAt(0) !== alvo.charAt(0)) continue;
+      if (levenshtein(t, alvo) <= max) return true;
+    }
+    return false;
+  }
+
   /* ---------- marcação de trechos consumidos ---------- */
   function Marcas() {
     this.spans = [];
@@ -461,6 +548,30 @@
         if (!melhor || alvo.length > normalizar(melhor.nome).length) melhor = h;
       }
     });
+    if (melhor) return melhor;
+
+    // fallback fuzzy: tolera erro de digitação no nome do hábito
+    var toks = tokens(n);
+    var melhorDist = Infinity;
+    (habitos || []).forEach(function (h) {
+      if (h.ativo === false) return;
+      var palavras = normalizar(h.nome)
+        .split(/\s+/)
+        .filter(function (p) {
+          return p.length >= 4;
+        });
+      palavras.forEach(function (p) {
+        var max = distanciaMaxima(p.length);
+        toks.forEach(function (t) {
+          if (Math.abs(t.length - p.length) > max) return;
+          var d = levenshtein(t, p);
+          if (d <= max && d < melhorDist) {
+            melhorDist = d;
+            melhor = h;
+          }
+        });
+      });
+    });
     return melhor;
   }
 
@@ -500,8 +611,7 @@
     var n = normalizar(original);
     var marcas = new Marcas();
 
-    if (/^\s*(ajuda|help|\?|comandos|o que voce faz)\s*[?!.]*\s*$/.test(n))
-      return { tipo: 'ajuda' };
+    if (RE_AJUDA.test(n)) return { tipo: 'ajuda' };
 
     /* --- consultas --- */
     if (
@@ -514,14 +624,10 @@
       else if (/\bsemana\b/.test(n)) escopo = 'semana';
       return { tipo: 'consulta', escopo: escopo };
     }
-    if (/\b(o que falta|falta o que|ainda falta|pendencias|pendencia|pendente)\b/.test(n)) {
+    if (RE_PENDENCIA.test(n)) {
       return { tipo: 'consulta', escopo: 'pendente' };
     }
-    if (
-      /\b(estatisticas|estatistica|progresso|sequencias|sequencia|streaks|streak|como fui)\b/.test(
-        n
-      )
-    ) {
+    if (RE_ESTATISTICAS.test(n)) {
       return { tipo: 'consulta', escopo: 'stats' };
     }
     if (
@@ -532,18 +638,19 @@
       return { tipo: 'consulta', escopo: 'treino' };
     }
 
-    var negado = /\b(nao|ainda nao|esqueci)\b/.test(n);
+    var negado = RE_NEGACAO.test(n);
 
     /* --- água --- */
     var recipiente =
       /\b(um|uma|dois|duas|tres|meio|meia|\d{1,2})\s*(copos?|litros?|garrafas?)\b/.test(n);
-    if (/\bagua\b/.test(n) || /\b\d{2,4}\s*ml\b/.test(n) || recipiente) {
-      if (/\b(meta|definir|configurar|mudar)\b/.test(n)) {
+    var temAgua = temPalavraFuzzy(n, 'agua');
+    if (temAgua || /\b\d{2,4}\s*ml\b/.test(n) || recipiente) {
+      if (RE_AGUA_CONFIG.test(n)) {
         return { tipo: 'config', campo: 'metaAgua', valor: extrairAgua(n, 2500) };
       }
-      var verboBebida = /\b(bebi|tomei|bebe|beber|tomar|enchi|encher|mais)\b/.test(n);
+      var verboBebida = RE_AGUA_VERBOS.test(n);
       var temNumero = /\d/.test(n);
-      if (verboBebida || recipiente || /\bml\b/.test(n) || (/\bagua\b/.test(n) && temNumero)) {
+      if (verboBebida || recipiente || /\bml\b/.test(n) || (temAgua && temNumero)) {
         return { tipo: 'agua', ml: extrairAgua(n, ctx.copoPadrao || 250) };
       }
     }
@@ -563,21 +670,16 @@
     }
 
     /* --- treino --- */
-    if (/\b(treinei|treino|treinar|academia|malhei|malhar|gym)\b/.test(n)) {
+    if (RE_TREINO_VERBOS.test(n)) {
       var mTr = new Marcas();
       var divisaoAchada = acharDivisao(n, ctx.divisao);
       var dataTr = extrairData(n, agora, mTr);
       var futuroTr = dataTr && zerar(dataTr) > zerar(agora);
-      var registrou = /\b(treinei|malhei|fui|fiz|acabei)\b/.test(n);
+      var registrou = RE_TREINO_REGISTROU.test(n);
       if (registrou && !negado) {
         return { tipo: 'treino', divisao: divisaoAchada, data: dataTr || agora };
       }
-      if (
-        !futuroTr &&
-        !negado &&
-        !/\b(vou|marcar|agendar|lembr)\b/.test(n) &&
-        !extrairHora(n, new Marcas())
-      ) {
+      if (!futuroTr && !negado && !RE_TREINO_PULAR.test(n) && !extrairHora(n, new Marcas())) {
         return { tipo: 'treino', divisao: divisaoAchada, data: dataTr || agora };
       }
     }
@@ -585,12 +687,12 @@
     /* --- hábitos --- */
     var hab = acharHabito(n, ctx.habitos);
     // "tomei os remédios" = registrar. "me lembra de tomar remédio às 22h" = compromisso.
-    var confirmou = /\b(tomei|fiz|ja|feito|concluido|apliquei|usei|acabei)\b/.test(n);
+    var confirmou = RE_HABITO_CONFIRMOU.test(n);
     var temQuando =
       !!extrairHora(n, new Marcas()) ||
       !!extrairData(n, agora, new Marcas()) ||
       !!extrairRecorrencia(n, new Marcas());
-    var infinitivo = /\b(tomar|fazer|marcar|nao)\b/.test(n);
+    var infinitivo = RE_HABITO_INFINITIVO.test(n);
     if (hab && !/\blembr/.test(n) && (confirmou || (infinitivo && !temQuando))) {
       var quant = null;
       var mq = /\b(\d+(?:[.,]\d+)?)\s*(g|gr|gramas?|ml|comprimidos?|caps|capsulas?|x|vezes)\b/.exec(
@@ -672,6 +774,7 @@
     extrairAgua: extrairAgua,
     limparTitulo: limparTitulo,
     proximoDiaSemana: proximoDiaSemana,
+    levenshtein: levenshtein,
     NOMES_DIA: NOMES_DIA,
     NOMES_DIA_CURTO: NOMES_DIA_CURTO,
     Marcas: Marcas
