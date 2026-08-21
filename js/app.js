@@ -1546,12 +1546,27 @@
     }
   }
 
-  function checarLembretes() {
+  function checarLembretes(toleranciaMin) {
     if (!st.config.notificacoes || !swReg) return;
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
-    N.disparar(st, new Date(), swReg).then(function (n) {
+    N.disparar(st, new Date(), swReg, toleranciaMin).then(function (n) {
       if (n > 0) S.salvar(st);
     });
+  }
+
+  // une o que o service worker já marcou como notificado (disparado em segundo
+  // plano) no estado em memória, sem tocar no resto — evita reavisar o que o
+  // sw.js já mostrou enquanto a página estava fechada/escondida.
+  function sincronizarNotificado() {
+    return S.carregar()
+      .then(function (fresco) {
+        Object.keys(fresco.notificado || {}).forEach(function (k) {
+          if (!st.notificado[k] || fresco.notificado[k] > st.notificado[k]) {
+            st.notificado[k] = fresco.notificado[k];
+          }
+        });
+      })
+      .catch(function () {});
   }
 
   /* ---------------- timer pomodoro ---------------- */
@@ -1826,7 +1841,13 @@
           diaCorrente = S.hoje();
           render();
         }
-        checarLembretes();
+        // catch-up: no iOS não existe periodicSync, então reabrir o app é a
+        // única chance de perceber lembretes que venceram enquanto o Safari
+        // barrava a checagem em segundo plano — janela bem maior que o poll
+        // normal (45 min) pra pegar o que ficou parado por horas.
+        sincronizarNotificado().then(function () {
+          checarLembretes(720);
+        });
       }
     });
 
@@ -1883,6 +1904,17 @@
           registrarSyncPeriodico();
         })
         .catch(function () {});
+    }
+
+    // avisado pelo sw.js quando ele dispara lembrete em segundo plano —
+    // sincroniza o que já foi notificado pra não reavisar e atualiza a tela
+    if (typeof BroadcastChannel !== 'undefined') {
+      var canalLembretes = new BroadcastChannel('rotina-lembretes');
+      canalLembretes.onmessage = function () {
+        sincronizarNotificado().then(function () {
+          render();
+        });
+      };
     }
 
     checarAtualizacao();

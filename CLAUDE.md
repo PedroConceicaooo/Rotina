@@ -90,7 +90,22 @@ primeiro pro resto. `versao.json` é explicitamente excluído do cache
 descrito abaixo. As checagens de lembrete em segundo plano vêm pelos eventos
 `periodicsync` (background sync periódico do Android) e `sync`, ambos
 chamando `checarLembretes()`, que carrega o estado via `RotinaStore` e
-delega pra `RotinaNotify.disparar()`.
+delega pra `RotinaNotify.disparar()`. `periodicSync` não existe no iOS —
+lá o catch-up ao reabrir o app (ver abaixo) é o único jeito de perceber
+lembrete atrasado. Quando `checarLembretes()` dispara alguma notificação,
+avisa as páginas abertas pelo `BroadcastChannel('rotina-lembretes')`.
+
+**Catch-up ao reabrir e sincronização entre abas**: `js/app.js` escuta
+`visibilitychange` e, ao voltar a ficar visível, chama
+`sincronizarNotificado()` (funde o `state.notificado` gravado pelo
+`sw.js` no `st` em memória, sem tocar no resto — evita reavisar o que já
+disparou em segundo plano) e então `checarLembretes(720)`: usa janela de
+tolerância de 12h nesse momento específico (bem maior que o poll normal de
+45 min) porque no iOS essa é a única chance de recuperar lembrete que
+venceu enquanto o app estava fechado. `js/app.js` também escuta o
+`BroadcastChannel('rotina-lembretes')` do `sw.js` — quando um lembrete
+dispara em segundo plano com a página aberta em outra aba/janela, sincroniza
+e re-renderiza sem esperar o próximo poll de 30s.
 
 **Fluxo de atualização**: `js/app.js` faz polling em
 `versao.json?t=<timestamp>` (no-store) e compara com a versão com que a

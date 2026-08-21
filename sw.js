@@ -99,7 +99,12 @@ self.addEventListener('fetch', function (e) {
   );
 });
 
-/* ---------- checagem de lembretes ---------- */
+/* ---------- checagem de lembretes ----------
+   BroadcastChannel avisa páginas abertas quando um lembrete dispara em
+   segundo plano, pra elas atualizarem sem esperar o próximo poll. */
+var canalLembretes =
+  typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('rotina-lembretes') : null;
+
 function checarLembretes() {
   return self.RotinaStore.carregar()
     .then(function (state) {
@@ -107,6 +112,8 @@ function checarLembretes() {
       return self.RotinaNotify.disparar(state, new Date(), self.registration).then(function (n) {
         if (n > 0)
           return self.RotinaStore.salvar(state).then(function () {
+            if (canalLembretes)
+              canalLembretes.postMessage({ tipo: 'lembretes', n: n, ts: Date.now() });
             return n;
           });
         return n;

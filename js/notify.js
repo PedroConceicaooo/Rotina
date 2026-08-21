@@ -201,8 +201,8 @@
     });
   }
 
-  function disparar(state, agora, reg) {
-    var lista = pendentes(state, agora);
+  function disparar(state, agora, reg, toleranciaMin) {
+    var lista = pendentes(state, agora, toleranciaMin);
     if (!lista.length) return Promise.resolve(0);
     return Promise.all(
       lista.map(function (l) {
