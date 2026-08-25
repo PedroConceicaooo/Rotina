@@ -401,6 +401,9 @@
               (hb.tipo === 'quantidade' && hb.meta ? ' · ' + hb.meta + (hb.unidade || '') : '') +
               (seq > 1 ? ' · <span class="streak">🔥 ' + seq + ' dias</span>' : '') +
               '</div></div>' +
+              '<button class="icone-btn" data-acoes-habito="' +
+              hb.id +
+              '" style="width:30px;height:30px;font-size:17px;flex:0 0 auto">⋮</button>' +
               '<button class="marcar ' +
               (on ? 'on' : '') +
               '" data-toggle="' +
@@ -742,6 +745,11 @@
         ' min antes' +
         (o.ev.notas ? '<br>' + esc(o.ev.notas) : '') +
         '</div></div>' +
+        '<button class="icone-btn" data-acoes-evento="' +
+        o.ev.id +
+        '" data-d="' +
+        diaStr +
+        '" style="width:30px;height:30px;font-size:17px;flex:0 0 auto">⋮</button>' +
         '<button class="marcar ' +
         (feito ? 'on' : '') +
         '" data-concluir="' +
@@ -1670,6 +1678,49 @@
   }
 
   /* ---------------- modais ---------------- */
+  // menu rápido de ações — alternativa por clique ao swipe-to-delete/edit:
+  // silenciar reaproveita o mesmo state.notificado que o notify.js já usa
+  // pra não re-notificar, então não precisa de campo novo no estado
+  function modalAcoesHabito(id) {
+    var hb = st.habitos.filter(function (h) {
+      return h.id === id;
+    })[0];
+    if (!hb) return;
+    var chave = 'hab:' + hb.id + ':' + S.hoje();
+    abrirModal(
+      '<h3>' +
+        esc(hb.emoji || '✅') +
+        ' ' +
+        esc(hb.nome) +
+        '</h3>' +
+        '<button class="btn sec" id="ac-editar">✏️ Editar</button>' +
+        '<div style="height:8px"></div>' +
+        '<button class="btn sec" id="ac-adiar">🔕 Silenciar lembrete de hoje</button>' +
+        '<div style="height:8px"></div>' +
+        '<button class="btn perigo" id="ac-excluir">🗑️ Excluir hábito</button>' +
+        '<button class="btn sec" data-fechar>Cancelar</button>'
+    );
+    $('#ac-editar').onclick = function () {
+      fecharModal();
+      modalHabito(id);
+    };
+    $('#ac-adiar').onclick = function () {
+      st.notificado[chave] = Date.now();
+      salvar();
+      fecharModal();
+      brinde('Lembrete de hoje silenciado');
+    };
+    $('#ac-excluir').onclick = function () {
+      if (!confirm('Excluir "' + hb.nome + '"?')) return;
+      st.habitos = st.habitos.filter(function (h) {
+        return h.id !== id;
+      });
+      fecharModal();
+      salvar();
+      brinde('Hábito excluído');
+    };
+  }
+
   function modalHabito(id) {
     var hb = id
       ? st.habitos.filter(function (h) {
@@ -1906,6 +1957,46 @@
       celebrarSeCompletou(antesTreino);
       fecharModal();
       brinde('Treino registrado 💪');
+    };
+  }
+
+  /** @param {string} id @param {string} diaStr */
+  function modalAcoesEvento(id, diaStr) {
+    var ev = st.eventos.filter(function (e) {
+      return e.id === id;
+    })[0];
+    if (!ev) return;
+    var chave = 'ev:' + ev.id + ':' + diaStr;
+    abrirModal(
+      '<h3>' +
+        (ev.subtipo === 'lembrete' ? '🔔 ' : '📅 ') +
+        esc(ev.titulo) +
+        '</h3>' +
+        '<button class="btn sec" id="ac-editar">✏️ Editar</button>' +
+        '<div style="height:8px"></div>' +
+        '<button class="btn sec" id="ac-adiar">🔕 Silenciar esse lembrete</button>' +
+        '<div style="height:8px"></div>' +
+        '<button class="btn perigo" id="ac-excluir">🗑️ Excluir compromisso</button>' +
+        '<button class="btn sec" data-fechar>Cancelar</button>'
+    );
+    $('#ac-editar').onclick = function () {
+      fecharModal();
+      modalEvento(id);
+    };
+    $('#ac-adiar').onclick = function () {
+      st.notificado[chave] = Date.now();
+      salvar();
+      fecharModal();
+      brinde('Lembrete silenciado pra essa ocorrência');
+    };
+    $('#ac-excluir').onclick = function () {
+      if (!confirm('Excluir "' + ev.titulo + '"?')) return;
+      st.eventos = st.eventos.filter(function (e) {
+        return e.id !== id;
+      });
+      fecharModal();
+      salvar();
+      brinde('Compromisso excluído');
     };
   }
 
@@ -2507,6 +2598,12 @@
         return;
       }
 
+      var bAcoesHab = alvo(t, '[data-acoes-habito]');
+      if (bAcoesHab) {
+        modalAcoesHabito(bAcoesHab.dataset.acoesHabito);
+        return;
+      }
+
       var item = alvo(t, '.item[data-habito]');
       if (item && !alvo(t, '[data-toggle]')) {
         modalHabito(item.dataset.habito);
@@ -2551,6 +2648,12 @@
         } else rr.eventosFeitos.splice(idx, 1);
         salvar();
         celebrarSeCompletou(antesConc);
+        return;
+      }
+
+      var bAcoesEv = alvo(t, '[data-acoes-evento]');
+      if (bAcoesEv) {
+        modalAcoesEvento(bAcoesEv.dataset.acoesEvento, bAcoesEv.dataset.d);
         return;
       }
 
