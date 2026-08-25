@@ -907,17 +907,9 @@
     renderConquistas();
   }
 
-  function renderConquistas() {
-    var totalAgua = 0,
-      totalEstudo = 0,
-      totalTreinos = 0;
-    Object.keys(st.registros).forEach(function (k) {
-      var r = st.registros[k];
-      totalAgua += r.agua || 0;
-      totalEstudo += r.estudoMin || 0;
-      totalTreinos += (r.treinos || []).length;
-    });
-
+  // maior sequência ativa entre água, estudo, treino e cada hábito — usada
+  // tanto nas conquistas quanto na imagem de compartilhamento
+  function melhorSequenciaAtual() {
     var melhorSeq = 0;
     if (st.config.metaAgua > 0) {
       melhorSeq = Math.max(
@@ -953,6 +945,21 @@
         })
       );
     });
+    return melhorSeq;
+  }
+
+  function renderConquistas() {
+    var totalAgua = 0,
+      totalEstudo = 0,
+      totalTreinos = 0;
+    Object.keys(st.registros).forEach(function (k) {
+      var r = st.registros[k];
+      totalAgua += r.agua || 0;
+      totalEstudo += r.estudoMin || 0;
+      totalTreinos += (r.treinos || []).length;
+    });
+
+    var melhorSeq = melhorSequenciaAtual();
 
     var badges = [
       {
@@ -1005,6 +1012,126 @@
         );
       })
       .join('');
+  }
+
+  /* ---------------- compartilhar progresso (imagem + Web Share API) ---------------- */
+  // desenha um cartão 1080x1350 (proporção de story) com os tokens de cor
+  // atuais do tema, pra imagem já sair combinando com claro/escuro
+  function gerarImagemConquista() {
+    return new Promise(function (resolve) {
+      var W = 1080,
+        H = 1350;
+      var canvas = document.createElement('canvas');
+      canvas.width = W;
+      canvas.height = H;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      var cs = getComputedStyle(document.documentElement);
+      var cor = function (v) {
+        return cs.getPropertyValue(v).trim();
+      };
+      var bg = cor('--bg'),
+        surface = cor('--surface-2'),
+        accent = cor('--accent'),
+        accent2 = cor('--accent-2'),
+        txt = cor('--txt'),
+        muted = cor('--muted');
+
+      var grad = ctx.createLinearGradient(0, 0, W, H);
+      grad.addColorStop(0, bg);
+      grad.addColorStop(1, surface);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+      ctx.textAlign = 'center';
+
+      ctx.fillStyle = muted;
+      ctx.font = '700 34px system-ui, -apple-system, sans-serif';
+      ctx.fillText('MINHA ROTINA', W / 2, 150);
+
+      var s = scoreDia();
+      ctx.fillStyle = txt;
+      ctx.font = '800 260px system-ui, -apple-system, sans-serif';
+      ctx.fillText(s + '%', W / 2, 470);
+      ctx.font = '500 38px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = muted;
+      ctx.fillText('cumprido hoje', W / 2, 540);
+
+      ctx.strokeStyle = surface;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(140, 630);
+      ctx.lineTo(W - 140, 630);
+      ctx.stroke();
+
+      var r = reg();
+      var stats = [
+        { label: 'NÍVEL', valor: String(nivelDe(st.xp)) },
+        { label: 'SEQUÊNCIA', valor: melhorSequenciaAtual() + ' dias' },
+        { label: 'ÁGUA', valor: (r.agua || 0) + ' ml' },
+        { label: 'ESTUDO', valor: (r.estudoMin || 0) + ' min' }
+      ];
+      var colW = (W - 160) / stats.length;
+      stats.forEach(function (item, i) {
+        var x = 80 + colW * i + colW / 2;
+        ctx.font = '800 56px system-ui, -apple-system, sans-serif';
+        ctx.fillStyle = accent;
+        ctx.fillText(item.valor, x, 740);
+        ctx.font = '600 26px system-ui, -apple-system, sans-serif';
+        ctx.fillStyle = muted;
+        ctx.fillText(item.label, x, 780);
+      });
+
+      ctx.font = '500 30px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = muted;
+      ctx.fillText(
+        nomeDia(hojeD()).charAt(0).toUpperCase() +
+          nomeDia(hojeD()).slice(1) +
+          ', ' +
+          dataCurta(hojeD()),
+        W / 2,
+        H - 150
+      );
+      ctx.font = '700 34px system-ui, -apple-system, sans-serif';
+      ctx.fillStyle = accent2;
+      ctx.fillText('🏠 Rotina', W / 2, H - 90);
+
+      canvas.toBlob(function (blob) {
+        resolve(blob);
+      }, 'image/png');
+    });
+  }
+
+  function compartilharConquista() {
+    gerarImagemConquista().then(function (blob) {
+      if (!blob) {
+        brinde('Não consegui gerar a imagem');
+        return;
+      }
+      var arquivo = new File([blob], 'rotina-' + S.hoje() + '.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+        navigator
+          .share({
+            files: [arquivo],
+            title: 'Minha rotina',
+            text: 'Olha meu progresso no Rotina hoje 💪'
+          })
+          .catch(function () {
+            /* usuário cancelou o share — não é erro */
+          });
+        return;
+      }
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'rotina-' + S.hoje() + '.png';
+      a.click();
+      setTimeout(function () {
+        URL.revokeObjectURL(a.href);
+      }, 3000);
+      brinde('Imagem baixada — compartilhe onde quiser');
+    });
   }
 
   // mapa de contribuições estilo GitHub: uma coluna por semana, do domingo
@@ -2330,6 +2457,7 @@
     };
     $('#btn-agua-config').onclick = modalConfig;
     $('#btn-proteger-dia').onclick = protegerHoje;
+    $('#btn-compartilhar').onclick = compartilharConquista;
 
     document.addEventListener('click', function (e) {
       var t = /** @type {HTMLElement} */ (e.target);
