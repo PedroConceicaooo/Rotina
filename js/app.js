@@ -15,6 +15,31 @@
   // preferência de expandir/colapsar divisão de treino — só de sessão, não salva no estado
   var divisaoAberta = {};
 
+  // onboarding: número de hábitos ativos além do qual avisamos (sem bloquear)
+  // durante a primeira semana de uso — quem cadastra 15 hábitos no dia 1
+  // costuma falhar e desinstalar.
+  var LIMITE_ONBOARDING = 3;
+  function diasDeUso() {
+    return Math.floor((Date.now() - new Date(st.criadoEm).getTime()) / 86400000);
+  }
+  function dentroOnboarding() {
+    return diasDeUso() < 7;
+  }
+  function habitosAtivos() {
+    return st.habitos.filter(function (h) {
+      return h.ativo;
+    }).length;
+  }
+
+  // XP / nível — 150 xp por nível, linear e sem balanceamento sofisticado
+  var XP_POR_NIVEL = 150;
+  function nivelDe(xp) {
+    return Math.floor((xp || 0) / XP_POR_NIVEL) + 1;
+  }
+  function ganharXp(qtd) {
+    st.xp = (st.xp || 0) + qtd;
+  }
+
   /* ---------------- utilidades ---------------- */
   function $(s, r) {
     return (r || document).querySelector(s);
@@ -296,6 +321,11 @@
     $('#anel-prog').setAttribute('stroke-dasharray', circ.toFixed(1));
     $('#anel-prog').setAttribute('stroke-dashoffset', (circ * (1 - s / 100)).toFixed(1));
     $('#anel-valor').textContent = s + '%';
+
+    var nivel = nivelDe(st.xp);
+    var xpNoNivel = (st.xp || 0) % XP_POR_NIVEL;
+    $('#xp-info').textContent =
+      '⭐ Nível ' + nivel + ' · ' + xpNoNivel + '/' + XP_POR_NIVEL + ' XP';
 
     // hábitos e metas (treino/estudo) ficam em listas separadas — juntar tudo
     // numa frase só deixava o "e mais N" ambíguo (hábito? meta? os dois?)
@@ -874,6 +904,107 @@
 
     renderHeatmap();
     renderTendencias();
+    renderConquistas();
+  }
+
+  function renderConquistas() {
+    var totalAgua = 0,
+      totalEstudo = 0,
+      totalTreinos = 0;
+    Object.keys(st.registros).forEach(function (k) {
+      var r = st.registros[k];
+      totalAgua += r.agua || 0;
+      totalEstudo += r.estudoMin || 0;
+      totalTreinos += (r.treinos || []).length;
+    });
+
+    var melhorSeq = 0;
+    if (st.config.metaAgua > 0) {
+      melhorSeq = Math.max(
+        melhorSeq,
+        sequencia(function (rr) {
+          return rr && (rr.agua || 0) >= st.config.metaAgua;
+        })
+      );
+    }
+    if (st.config.metaEstudoMin > 0) {
+      melhorSeq = Math.max(
+        melhorSeq,
+        sequencia(function (rr) {
+          return rr && (rr.estudoMin || 0) >= st.config.metaEstudoMin;
+        })
+      );
+    }
+    melhorSeq = Math.max(
+      melhorSeq,
+      sequencia(function (rr, dd) {
+        var prev = N.treinoDoDia(st, dd);
+        if (!prev) return true;
+        return rr && rr.treinos && rr.treinos.length > 0;
+      })
+    );
+    st.habitos.forEach(function (h) {
+      if (!h.ativo) return;
+      melhorSeq = Math.max(
+        melhorSeq,
+        sequencia(function (rr, dd) {
+          if ((h.dias || []).indexOf(dd.getDay()) === -1) return true;
+          return rr && rr.habitos && rr.habitos[h.id];
+        })
+      );
+    });
+
+    var badges = [
+      {
+        emoji: '💧',
+        nome: 'Hidratado(a)',
+        ok: totalAgua >= 50000,
+        prog: Math.min(100, Math.round((totalAgua / 50000) * 100))
+      },
+      {
+        emoji: '📚',
+        nome: 'Estudioso(a)',
+        ok: totalEstudo >= 1000,
+        prog: Math.min(100, Math.round((totalEstudo / 1000) * 100))
+      },
+      {
+        emoji: '🏋️',
+        nome: 'Regular na academia',
+        ok: totalTreinos >= 20,
+        prog: Math.min(100, Math.round((totalTreinos / 20) * 100))
+      },
+      {
+        emoji: '🔥',
+        nome: 'Consistente',
+        ok: melhorSeq >= 14,
+        prog: Math.min(100, Math.round((melhorSeq / 14) * 100))
+      },
+      {
+        emoji: '⭐',
+        nome: 'Nível 5',
+        ok: nivelDe(st.xp) >= 5,
+        prog: Math.min(100, Math.round((nivelDe(st.xp) / 5) * 100))
+      }
+    ];
+
+    $('#historico-conquistas').innerHTML = badges
+      .map(function (b) {
+        return (
+          '<div class="item">' +
+          '<span class="emoji"' +
+          (b.ok ? '' : ' style="filter:grayscale(1);opacity:.45"') +
+          '>' +
+          b.emoji +
+          '</span>' +
+          '<div class="info"><div class="nome">' +
+          b.nome +
+          '</div>' +
+          '<div class="meta">' +
+          (b.ok ? 'Conquistado ✓' : b.prog + '% do caminho') +
+          '</div></div></div>'
+        );
+      })
+      .join('');
   }
 
   // mapa de contribuições estilo GitHub: uma coluna por semana, do domingo
@@ -991,6 +1122,7 @@
   function addAgua(ml) {
     var r = reg();
     r.agua = Math.max(0, (r.agua || 0) + ml);
+    if (ml > 0) ganharXp(5);
     salvar();
     return r.agua;
   }
@@ -1001,9 +1133,11 @@
         return h.id === id;
       })[0];
     if (!hb) return null;
-    if (typeof valor === 'undefined') valor = !r.habitos[id];
+    var jaEstava = !!r.habitos[id];
+    if (typeof valor === 'undefined') valor = !jaEstava;
     if (!valor) delete r.habitos[id];
     else r.habitos[id] = valor;
+    if (!jaEstava && r.habitos[id]) ganharXp(10);
     salvar();
     return { habito: hb, on: !!r.habitos[id] };
   }
@@ -1011,6 +1145,7 @@
   function addEstudo(min, data) {
     var r = reg(data);
     r.estudoMin = Math.max(0, (r.estudoMin || 0) + min);
+    if (min > 0) ganharXp(Math.max(1, Math.round(min / 5)));
     salvar();
     return r.estudoMin;
   }
@@ -1034,6 +1169,7 @@
       hora: hora(new Date()),
       exercicios: exs
     });
+    ganharXp(30);
     salvar();
     return dv;
   }
@@ -1198,6 +1334,12 @@
         };
         st.habitos.push(novo);
         salvar();
+        var dicaOnboarding =
+          dentroOnboarding() && habitosAtivos() > LIMITE_ONBOARDING
+            ? '\n\n💡 Você já tem ' +
+              habitosAtivos() +
+              ' hábitos ativos nesta primeira semana. Focar em poucos primeiro costuma grudar mais.'
+            : '';
         return (
           '✅ Hábito "' +
           novo.nome +
@@ -1205,7 +1347,8 @@
           diasLabel(novo.dias) +
           ' às ' +
           novo.horario +
-          '.'
+          '.' +
+          dicaOnboarding
         );
       }
 
@@ -1466,6 +1609,16 @@
     );
 
     $('#f-salvar').onclick = function () {
+      if (novo && dentroOnboarding() && habitosAtivos() >= LIMITE_ONBOARDING) {
+        var seguir = confirm(
+          'Você já tem ' +
+            habitosAtivos() +
+            ' hábitos ativos criados nesta primeira semana.\n\n' +
+            'Rotina nova gruda mais quando você foca em poucos hábitos primeiro — dá pra adicionar o resto depois que os primeiros já viraram costume.\n\n' +
+            'Adicionar mesmo assim?'
+        );
+        if (!seguir) return;
+      }
       hb.nome = $('#f-nome').value.trim() || 'Hábito';
       hb.emoji = $('#f-emoji').value.trim() || '✅';
       hb.horario = $('#f-hora').value || '08:00';
@@ -2265,6 +2418,7 @@
         var idx = rr.eventosFeitos.indexOf(bConc.dataset.concluir);
         if (idx === -1) {
           rr.eventosFeitos.push(bConc.dataset.concluir);
+          ganharXp(5);
           vibrar(15);
         } else rr.eventosFeitos.splice(idx, 1);
         salvar();

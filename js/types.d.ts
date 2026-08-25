@@ -104,6 +104,8 @@ interface Estado {
   diasProtegidos: string[];
   /** pausas de lembrete/streak (modo férias) */
   pausas: Array<{ inicio: string; fim: string }>;
+  /** pontos de experiência acumulados, base do nível */
+  xp: number;
 }
 
 /** Um lembrete calculado por notify.js pra um dia específico. */

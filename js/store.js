@@ -224,7 +224,9 @@
       // dias 'YYYY-MM-DD' protegidos manualmente (congelamento de streak)
       diasProtegidos: [],
       // pausas de lembrete/streak (modo férias): [{ inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' }]
-      pausas: []
+      pausas: [],
+      // pontos de experiência acumulados, base do nível (gamificação leve)
+      xp: 0
     };
   }
 
@@ -274,6 +276,7 @@
     if (!s.notificado || typeof s.notificado !== 'object') s.notificado = {};
     if (!Array.isArray(s.diasProtegidos)) s.diasProtegidos = [];
     if (!Array.isArray(s.pausas)) s.pausas = [];
+    if (typeof s.xp !== 'number') s.xp = 0;
     return s;
   }
 
