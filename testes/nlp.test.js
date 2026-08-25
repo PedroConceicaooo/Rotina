@@ -229,6 +229,13 @@ t('novo hábito tomar ômega 3 às 12h todo dia', (r) => {
   eq(r.tipo, 'novoHabito');
   eq(r.horario, '12:00');
   eq(JSON.stringify(r.dias), '[0,1,2,3,4,5,6]');
+  eq(r.frequenciaSemanal, null);
+});
+t('novo hábito correr 3 vezes por semana', (r) => {
+  eq(r.tipo, 'novoHabito');
+  eq(r.frequenciaSemanal, 3);
+  eq(JSON.stringify(r.dias), '[]');
+  eq(r.nome, 'Correr');
 });
 
 /* ---------- desconhecido ---------- */

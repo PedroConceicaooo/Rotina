@@ -731,12 +731,24 @@
       var m2 = new Marcas();
       var horaH = extrairHora(nn, m2);
       var recH = extrairRecorrencia(nn, m2);
+      // "3 vezes por semana" / "3x na semana" — recorrência livre, sem dia
+      // fixo. Parseado à parte de extrairRecorrencia pra não arriscar
+      // vazar esse tipo pra dentro de eventos/compromissos, que não sabem
+      // lidar com frequência semanal solta.
+      var mFreq = /\b(\d+)\s*(?:x|vezes)\s*(?:por|na)\s*semana\b/.exec(nn);
+      if (mFreq) m2.add(mFreq.index, mFreq[0].length);
+      var freqSemanal = mFreq ? Math.max(1, Math.min(7, +mFreq[1])) : null;
       var nomeH = limparTitulo(m2.limpar(restoOrig));
       return {
         tipo: 'novoHabito',
         nome: nomeH || 'Novo hábito',
         horario: horaH ? pad2(horaH.h) + ':' + pad2(horaH.m) : '09:00',
-        dias: recH && recH.tipo === 'semanal' ? recH.dias : [0, 1, 2, 3, 4, 5, 6]
+        dias: freqSemanal
+          ? []
+          : recH && recH.tipo === 'semanal'
+            ? recH.dias
+            : [0, 1, 2, 3, 4, 5, 6],
+        frequenciaSemanal: freqSemanal
       };
     }
 

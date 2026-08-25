@@ -15,8 +15,10 @@ interface Habito {
   unidade?: string;
   /** 'HH:MM' */
   horario: string;
-  /** 0=domingo .. 6=sábado */
+  /** 0=domingo .. 6=sábado — ignorado quando frequenciaSemanal está definido */
   dias: number[];
+  /** recorrência livre ("3x por semana"): quantas vezes por semana, sem dia fixo */
+  frequenciaSemanal?: number | null;
   lembrete: boolean;
   ativo: boolean;
 }
@@ -138,7 +140,13 @@ type AcaoEstudo = { tipo: 'estudo'; minutos: number | null; data?: Date; pergunt
 type AcaoPomodoro = { tipo: 'pomodoro' };
 type AcaoTreino = { tipo: 'treino'; divisao: DivisaoTreino | null; data: Date };
 type AcaoHabito = { tipo: 'habito'; habito: Habito; valor: boolean | number; desmarcar: boolean };
-type AcaoNovoHabito = { tipo: 'novoHabito'; nome: string; horario: string; dias: number[] };
+type AcaoNovoHabito = {
+  tipo: 'novoHabito';
+  nome: string;
+  horario: string;
+  dias: number[];
+  frequenciaSemanal: number | null;
+};
 type AcaoEvento = {
   tipo: 'evento';
   titulo: string;

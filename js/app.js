@@ -211,6 +211,36 @@
     });
   }
 
+  /* ---------------- hábito com dia fixo vs frequência semanal livre ---------------- */
+  function inicioSemana(d) {
+    var x = new Date(d.getTime());
+    x.setDate(x.getDate() - x.getDay());
+    return x;
+  }
+  // hábito com frequenciaSemanal não tem dia certo — "aplica" (é esperado)
+  // num dia enquanto a cota da semana (domingo a sábado) ainda não foi
+  // batida antes desse dia. Bater a meta cedo faz o hábito sumir da lista
+  // pro resto da semana, em vez de cobrar todo dia.
+  function habitoAplicaEm(h, d) {
+    if (!h.frequenciaSemanal) return (h.dias || []).indexOf(d.getDay()) !== -1;
+    var ini = inicioSemana(d);
+    var feitosAntes = 0;
+    for (var x = new Date(ini.getTime()); x < d; x.setDate(x.getDate() + 1)) {
+      var rr = st.registros[S.iso(x)];
+      if (rr && rr.habitos && rr.habitos[h.id]) feitosAntes++;
+    }
+    return feitosAntes < h.frequenciaSemanal;
+  }
+  function contarFeitosNaSemana(h, d) {
+    var ini = inicioSemana(d);
+    var n = 0;
+    for (var x = new Date(ini.getTime()); x <= d; x.setDate(x.getDate() + 1)) {
+      var rr = st.registros[S.iso(x)];
+      if (rr && rr.habitos && rr.habitos[h.id]) n++;
+    }
+    return n;
+  }
+
   /* ---------------- score do dia ---------------- */
   // null quando o dia não tinha nada previsto (hábito/meta/evento) — não é
   // "0% cumprido", é "não se aplica", e o histórico trata isso diferente.
@@ -225,7 +255,7 @@
       total = 0,
       feito = 0;
     st.habitos.forEach(function (h) {
-      if (!h.ativo || (h.dias || []).indexOf(d.getDay()) === -1) return;
+      if (!h.ativo || !habitoAplicaEm(h, d)) return;
       total++;
       if (r.habitos[h.id]) feito++;
     });
@@ -331,8 +361,7 @@
     // numa frase só deixava o "e mais N" ambíguo (hábito? meta? os dois?)
     var pendHabitos = [];
     st.habitos.forEach(function (hb) {
-      if (hb.ativo && (hb.dias || []).indexOf(d.getDay()) !== -1 && !r.habitos[hb.id])
-        pendHabitos.push(hb.nome);
+      if (hb.ativo && habitoAplicaEm(hb, d) && !r.habitos[hb.id]) pendHabitos.push(hb.nome);
     });
     var pendMetas = [];
     var divs = N.treinoDoDia(st, d);
@@ -375,15 +404,23 @@
 
     // hábitos
     var lista = st.habitos.filter(function (hb) {
-      return hb.ativo && (hb.dias || []).indexOf(d.getDay()) !== -1;
+      return hb.ativo && habitoAplicaEm(hb, d);
     });
     $('#lista-habitos').innerHTML = lista.length
       ? lista
           .map(function (hb) {
             var on = !!r.habitos[hb.id];
-            var seq = sequencia(function (rr) {
-              return rr && rr.habitos && rr.habitos[hb.id];
-            });
+            var progresso;
+            if (hb.frequenciaSemanal) {
+              progresso =
+                ' · ' + contarFeitosNaSemana(hb, d) + '/' + hb.frequenciaSemanal + ' esta semana';
+            } else {
+              var seq = sequencia(function (rr, dd) {
+                if (!habitoAplicaEm(hb, dd)) return true;
+                return rr && rr.habitos && rr.habitos[hb.id];
+              });
+              progresso = seq > 1 ? ' · <span class="streak">🔥 ' + seq + ' dias</span>' : '';
+            }
             return (
               '<div class="item ' +
               (on ? 'feito' : '') +
@@ -399,7 +436,7 @@
               '<div class="meta">' +
               esc(hb.horario) +
               (hb.tipo === 'quantidade' && hb.meta ? ' · ' + hb.meta + (hb.unidade || '') : '') +
-              (seq > 1 ? ' · <span class="streak">🔥 ' + seq + ' dias</span>' : '') +
+              progresso +
               '</div></div>' +
               '<button class="icone-btn" data-acoes-habito="' +
               hb.id +
@@ -793,7 +830,7 @@
       var totalHabitos = 0,
         feitoHabitos = 0;
       st.habitos.forEach(function (h) {
-        if (!h.ativo || (h.dias || []).indexOf(d.getDay()) === -1) return;
+        if (!h.ativo || !habitoAplicaEm(h, d)) return;
         totalHabitos++;
         if (rr && rr.habitos && rr.habitos[h.id]) feitoHabitos++;
       });
@@ -876,10 +913,13 @@
       return rr && rr.treinos && rr.treinos.length > 0;
     });
     if (seqT > 1) seqs.push('🏋️ Treino ' + seqT + ' dias');
+    // hábitos de dia fixo entram na sequência diária normal; os de frequência
+    // livre já mostram progresso próprio ("X/Y esta semana") na lista de
+    // hoje — "dias seguidos" não descreve bem uma meta semanal solta
     st.habitos.forEach(function (h) {
-      if (!h.ativo) return;
+      if (!h.ativo || h.frequenciaSemanal) return;
       var seqH = sequencia(function (rr, dd) {
-        if ((h.dias || []).indexOf(dd.getDay()) === -1) return true;
+        if (!habitoAplicaEm(h, dd)) return true;
         return rr && rr.habitos && rr.habitos[h.id];
       });
       if (seqH > 1) seqs.push(esc(h.emoji || '✅') + ' ' + esc(h.nome) + ' ' + seqH + ' dias');
@@ -944,11 +984,11 @@
       })
     );
     st.habitos.forEach(function (h) {
-      if (!h.ativo) return;
+      if (!h.ativo || h.frequenciaSemanal) return;
       melhorSeq = Math.max(
         melhorSeq,
         sequencia(function (rr, dd) {
-          if ((h.dias || []).indexOf(dd.getDay()) === -1) return true;
+          if (!habitoAplicaEm(h, dd)) return true;
           return rr && rr.habitos && rr.habitos[h.id];
         })
       );
@@ -1464,6 +1504,7 @@
           tipo: 'check',
           horario: a.horario,
           dias: a.dias,
+          frequenciaSemanal: a.frequenciaSemanal || null,
           lembrete: true,
           ativo: true
         };
@@ -1475,11 +1516,14 @@
               habitosAtivos() +
               ' hábitos ativos nesta primeira semana. Focar em poucos primeiro costuma grudar mais.'
             : '';
+        var quandoLabel = novo.frequenciaSemanal
+          ? novo.frequenciaSemanal + 'x por semana'
+          : diasLabel(novo.dias);
         return (
           '✅ Hábito "' +
           novo.nome +
           '" criado — ' +
-          diasLabel(novo.dias) +
+          quandoLabel +
           ' às ' +
           novo.horario +
           '.' +
@@ -1590,7 +1634,7 @@
     if (escopo === 'pendente') {
       var falta = [];
       st.habitos.forEach(function (hb) {
-        if (hb.ativo && (hb.dias || []).indexOf(d.getDay()) !== -1 && !r.habitos[hb.id]) {
+        if (hb.ativo && habitoAplicaEm(hb, d) && !r.habitos[hb.id]) {
           falta.push((hb.emoji || '✅') + ' ' + hb.nome + ' (' + hb.horario + ')');
         }
       });
@@ -1643,7 +1687,7 @@
       escopo === 'amanha' ? '🗓️ Amanhã (' + nomeDia(dia) + '):' : '🗓️ Hoje (' + nomeDia(dia) + '):'
     ];
     var hs = st.habitos.filter(function (hb) {
-      return hb.ativo && (hb.dias || []).indexOf(dia.getDay()) !== -1;
+      return hb.ativo && habitoAplicaEm(hb, dia);
     });
     if (hs.length) {
       out.push('\nRotina:');
@@ -1737,6 +1781,7 @@
       unidade: '',
       horario: '08:00',
       dias: [0, 1, 2, 3, 4, 5, 6],
+      frequenciaSemanal: null,
       lembrete: true,
       ativo: true
     };
@@ -1772,8 +1817,27 @@
         esc(hb.unidade || '') +
         '" placeholder="g"></div></label>' +
         '</div>' +
-        '<label class="campo"><span>Dias da semana</span></label>' +
+        '<label class="campo"><span>Quando</span><select id="f-freq-tipo">' +
+        '<option value="dias"' +
+        (!hb.frequenciaSemanal ? ' selected' : '') +
+        '>Dias fixos da semana</option>' +
+        '<option value="semanal"' +
+        (hb.frequenciaSemanal ? ' selected' : '') +
+        '>Nº de vezes por semana (livre)</option>' +
+        '</select></label>' +
+        '<div id="f-dias-wrap"' +
+        (hb.frequenciaSemanal ? ' style="display:none"' : '') +
+        '>' +
         seletorDias(hb.dias, 'f-dias') +
+        '</div>' +
+        '<div id="f-freq-wrap"' +
+        (hb.frequenciaSemanal ? '' : ' style="display:none"') +
+        '>' +
+        '<label class="campo"><span>Quantas vezes por semana</span><input type="number" id="f-freq-num" min="1" max="7" value="' +
+        (hb.frequenciaSemanal || 3) +
+        '"></label>' +
+        '<p class="mini">O hábito aparece todo dia até bater a meta da semana, depois some até domingo.</p>' +
+        '</div>' +
         '<div style="height:14px"></div>' +
         '<label class="campo" style="display:flex;align-items:center;gap:10px">' +
         '<input type="checkbox" class="toggle" id="f-lembrete" ' +
@@ -1785,6 +1849,12 @@
         (novo ? '' : '<button class="btn perigo" id="f-excluir">Excluir hábito</button>') +
         '<button class="btn sec" data-fechar>Cancelar</button>'
     );
+
+    $('#f-freq-tipo').onchange = function () {
+      var livre = $('#f-freq-tipo').value === 'semanal';
+      $('#f-dias-wrap').style.display = livre ? 'none' : '';
+      $('#f-freq-wrap').style.display = livre ? '' : 'none';
+    };
 
     $('#f-salvar').onclick = function () {
       if (novo && dentroOnboarding() && habitosAtivos() >= LIMITE_ONBOARDING) {
@@ -1803,7 +1873,13 @@
       hb.tipo = $('#f-tipo').value;
       hb.meta = $('#f-meta').value ? +$('#f-meta').value : '';
       hb.unidade = $('#f-unid').value.trim();
-      hb.dias = lerDias('f-dias');
+      if ($('#f-freq-tipo').value === 'semanal') {
+        hb.frequenciaSemanal = Math.max(1, Math.min(7, +$('#f-freq-num').value || 3));
+        hb.dias = [];
+      } else {
+        hb.frequenciaSemanal = null;
+        hb.dias = lerDias('f-dias');
+      }
       hb.lembrete = $('#f-lembrete').checked;
       if (novo) st.habitos.push(hb);
       fecharModal();
@@ -2593,7 +2669,16 @@
         if (res) {
           if (res.on) vibrar(15);
           celebrarSeCompletou(antesTog);
-          brinde(res.on ? res.habito.nome + ' ✅' : res.habito.nome + ' desmarcado');
+          var msgTog = res.on ? res.habito.nome + ' ✅' : res.habito.nome + ' desmarcado';
+          if (res.on && res.habito.frequenciaSemanal) {
+            var feitosSem = contarFeitosNaSemana(res.habito, hojeD());
+            if (feitosSem >= res.habito.frequenciaSemanal) {
+              msgTog += ' — meta da semana batida! 🎉';
+            } else {
+              msgTog += ' (' + feitosSem + '/' + res.habito.frequenciaSemanal + ' esta semana)';
+            }
+          }
+          brinde(msgTog);
         }
         return;
       }

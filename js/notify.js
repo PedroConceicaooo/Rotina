@@ -36,6 +36,26 @@
     });
   }
 
+  /**
+   * hábito com frequenciaSemanal não tem dia fixo — "aplica" (é esperado)
+   * enquanto a cota da semana (domingo a sábado) ainda não foi batida antes
+   * desse dia. Espelha habitoAplicaEm() de app.js; duplicado de propósito
+   * pra notify.js continuar puro (só função de state, sem depender de
+   * ordem de carregamento do RotinaStore).
+   * @param {Estado} state @param {Habito} h @param {Date} dia
+   */
+  function habitoAplicaEm(state, h, dia) {
+    if (!h.frequenciaSemanal) return (h.dias || []).indexOf(dia.getDay()) !== -1;
+    var ini = zerar(dia);
+    ini.setDate(ini.getDate() - ini.getDay());
+    var feitosAntes = 0;
+    for (var x = new Date(ini.getTime()); x < dia; x.setDate(x.getDate() + 1)) {
+      var rr = (state.registros || {})[isoData(x)];
+      if (rr && rr.habitos && rr.habitos[h.id]) feitosAntes++;
+    }
+    return feitosAntes < h.frequenciaSemanal;
+  }
+
   /* ---------- ocorrências de um evento em um dia ---------- */
   /**
    * @param {Evento} ev
@@ -108,12 +128,11 @@
       treinos: [],
       eventosFeitos: []
     };
-    var dow = dia.getDay();
 
     // hábitos
     (state.habitos || []).forEach(function (h) {
       if (!h.ativo || !h.lembrete) return;
-      if ((h.dias || []).indexOf(dow) === -1) return;
+      if (!habitoAplicaEm(state, h, dia)) return;
       var feito = reg.habitos && reg.habitos[h.id];
       if (feito) return;
       out.push({
