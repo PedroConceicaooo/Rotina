@@ -244,7 +244,12 @@
   /* ---------------- score do dia ---------------- */
   // null quando o dia não tinha nada previsto (hábito/meta/evento) — não é
   // "0% cumprido", é "não se aplica", e o histórico trata isso diferente.
+  // Dia anterior à criação da conta também vira null: sem isso, hábitos
+  // cadastrados hoje "existiam" retroativamente nos dias antes da conta
+  // existir, virando 0% em vez de "não tinha app ainda" — puxava pra baixo
+  // a taxa mensal e a média por dia da semana do Histórico.
   function scoreDoDia(d) {
+    if (S.iso(d) < S.iso(new Date(st.criadoEm))) return null;
     var r = st.registros[S.iso(d)] || {
         habitos: {},
         agua: 0,
@@ -805,7 +810,9 @@
 
   /* ---------------- vista: HISTÓRICO ---------------- */
   function renderHistorico() {
-    var DIAS = 30;
+    // conta só desde a criação da conta — sem isso, uma conta nova de 1 dia
+    // mostra 29 linhas "sem dados" antes do único dia real que existe
+    var DIAS = Math.min(30, diasDeUso() + 1);
     var somaScore7 = 0,
       nScore7 = 0,
       somaScore30 = 0,
@@ -858,6 +865,7 @@
       );
     }
     $('#historico-dias').innerHTML = linhas.join('');
+    $('#historico-dias-titulo').textContent = 'Dia a dia (' + plural(DIAS, 'dia', 'dias') + ')';
 
     // barras dos últimos 14 dias
     var barras = [];
@@ -891,7 +899,7 @@
           media7 +
           '% nos últimos 7 dias' +
           (media30 !== null ? ' · ' + media30 + '% em 30 dias' : '')
-        : 'Sem dados suficientes ainda.';
+        : 'Ainda sem média — marque um hábito ou beba água que eu já começo a calcular. 🌱';
 
     // sequências em destaque
     var seqs = [];
@@ -1042,24 +1050,32 @@
       }
     ];
 
-    $('#historico-conquistas').innerHTML = badges
-      .map(function (b) {
-        return (
-          '<div class="item">' +
-          '<span class="emoji"' +
-          (b.ok ? '' : ' style="filter:grayscale(1);opacity:.45"') +
-          '>' +
-          b.emoji +
-          '</span>' +
-          '<div class="info"><div class="nome">' +
-          b.nome +
-          '</div>' +
-          '<div class="meta">' +
-          (b.ok ? 'Conquistado ✓' : b.prog + '% do caminho') +
-          '</div></div></div>'
-        );
-      })
-      .join('');
+    var nenhumaConquistada = badges.every(function (b) {
+      return !b.ok;
+    });
+    var intro = nenhumaConquistada
+      ? '<p class="mini" style="margin-bottom:8px">Suas primeiras conquistas aparecem aqui — cada barra abaixo mostra o quanto falta pra próxima.</p>'
+      : '';
+    $('#historico-conquistas').innerHTML =
+      intro +
+      badges
+        .map(function (b) {
+          return (
+            '<div class="item">' +
+            '<span class="emoji"' +
+            (b.ok ? '' : ' style="filter:grayscale(1);opacity:.45"') +
+            '>' +
+            b.emoji +
+            '</span>' +
+            '<div class="info"><div class="nome">' +
+            b.nome +
+            '</div>' +
+            '<div class="meta">' +
+            (b.ok ? 'Conquistado ✓' : b.prog + '% do caminho') +
+            '</div></div></div>'
+          );
+        })
+        .join('');
   }
 
   /* ---------------- compartilhar progresso (imagem + Web Share API) ---------------- */
@@ -1218,6 +1234,11 @@
     var alvo = $('#historico-heatmap');
     alvo.innerHTML = html;
     alvo.scrollLeft = alvo.scrollWidth;
+
+    $('#historico-heatmap-legenda').textContent =
+      diasDeUso() < 3
+        ? 'O mapa vai ganhando cor a cada dia usado — ainda é cedo pra ver padrão. 🌱'
+        : '';
   }
 
   function renderTendencias() {
