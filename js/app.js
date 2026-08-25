@@ -149,9 +149,16 @@
   }
 
   /* ---------------- score do dia ---------------- */
-  function scoreDia() {
-    var d = hojeD(),
-      r = reg(),
+  // null quando o dia não tinha nada previsto (hábito/meta/evento) — não é
+  // "0% cumprido", é "não se aplica", e o histórico trata isso diferente.
+  function scoreDoDia(d) {
+    var r = st.registros[S.iso(d)] || {
+        habitos: {},
+        agua: 0,
+        estudoMin: 0,
+        treinos: [],
+        eventosFeitos: []
+      },
       total = 0,
       feito = 0;
     st.habitos.forEach(function (h) {
@@ -176,8 +183,11 @@
       total++;
       if (r.eventosFeitos.indexOf(o.ev.id) !== -1) feito++;
     });
-    if (!total) return 0;
+    if (!total) return null;
     return Math.round((feito / total) * 100);
+  }
+  function scoreDia() {
+    return scoreDoDia(hojeD()) || 0;
   }
 
   // Conta dias consecutivos cumpridos. Se hoje ainda não foi cumprido,
@@ -200,7 +210,8 @@
     chat: 'Chat',
     treino: 'Treino',
     estudos: 'Estudos',
-    agenda: 'Agenda'
+    agenda: 'Agenda',
+    historico: 'Histórico'
   };
   function renderTopo() {
     $('#titulo-topo').textContent = TITULOS[vista] || 'Rotina';
@@ -673,6 +684,137 @@
       : '<p class="vazio">Nenhum compromisso nos próximos 35 dias.<br>Use o chat: "consulta no dentista quinta 15h".</p>';
   }
 
+  /* ---------------- vista: HISTÓRICO ---------------- */
+  function renderHistorico() {
+    var DIAS = 30;
+    var somaScore7 = 0,
+      nScore7 = 0,
+      somaScore30 = 0,
+      nScore30 = 0;
+    var linhas = [];
+    for (var i = 0; i < DIAS; i++) {
+      var d = hojeD();
+      d.setDate(d.getDate() - i);
+      var s = scoreDoDia(d);
+      if (s !== null) {
+        somaScore30 += s;
+        nScore30++;
+        if (i < 7) {
+          somaScore7 += s;
+          nScore7++;
+        }
+      }
+      var rr = st.registros[S.iso(d)];
+      var agua = (rr && rr.agua) || 0;
+      var estudoMin = (rr && rr.estudoMin) || 0;
+      var treinoFeito = !!(rr && rr.treinos && rr.treinos.length);
+      var totalHabitos = 0,
+        feitoHabitos = 0;
+      st.habitos.forEach(function (h) {
+        if (!h.ativo || (h.dias || []).indexOf(d.getDay()) === -1) return;
+        totalHabitos++;
+        if (rr && rr.habitos && rr.habitos[h.id]) feitoHabitos++;
+      });
+      var label = i === 0 ? 'Hoje' : i === 1 ? 'Ontem' : nomeDia(d) + ', ' + dataCurta(d);
+      linhas.push(
+        '<div class="item">' +
+          '<span class="emoji">' +
+          (s === null ? '⚪' : s >= 70 ? '✅' : s >= 40 ? '🟡' : '🔴') +
+          '</span>' +
+          '<div class="info"><div class="nome">' +
+          label +
+          '</div>' +
+          '<div class="meta">💧 ' +
+          agua +
+          ' ml · 📚 ' +
+          estudoMin +
+          ' min · 🏋️ ' +
+          (treinoFeito ? 'sim' : 'não') +
+          (totalHabitos ? ' · ✅ ' + feitoHabitos + '/' + totalHabitos + ' hábitos' : '') +
+          '</div></div>' +
+          '<strong style="flex:0 0 auto;font-size:14px">' +
+          (s === null ? '—' : s + '%') +
+          '</strong>' +
+          '</div>'
+      );
+    }
+    $('#historico-dias').innerHTML = linhas.join('');
+
+    // barras dos últimos 14 dias
+    var barras = [];
+    for (var j = 13; j >= 0; j--) {
+      var dj = hojeD();
+      dj.setDate(dj.getDate() - j);
+      var sj = scoreDoDia(dj);
+      barras.push(
+        '<div class="col" title="' +
+          dataCurta(dj) +
+          ': ' +
+          (sj === null ? 'sem dados' : sj + '%') +
+          '">' +
+          '<div class="haste ' +
+          (sj !== null && sj >= 70 ? 'ok' : '') +
+          '" style="height:' +
+          (sj === null ? 4 : Math.max(4, sj)) +
+          '%"></div>' +
+          '<div class="rot">' +
+          NLP.NOMES_DIA_CURTO[dj.getDay()] +
+          '</div></div>'
+      );
+    }
+    $('#historico-semana').innerHTML = barras.join('');
+
+    var media7 = nScore7 ? Math.round(somaScore7 / nScore7) : null;
+    var media30 = nScore30 ? Math.round(somaScore30 / nScore30) : null;
+    $('#historico-media').textContent =
+      media7 !== null
+        ? 'Média de ' +
+          media7 +
+          '% nos últimos 7 dias' +
+          (media30 !== null ? ' · ' + media30 + '% em 30 dias' : '')
+        : 'Sem dados suficientes ainda.';
+
+    // sequências em destaque
+    var seqs = [];
+    if (st.config.metaAgua > 0) {
+      var seqA = sequencia(function (rr) {
+        return rr && (rr.agua || 0) >= st.config.metaAgua;
+      });
+      if (seqA > 1) seqs.push('💧 Água ' + seqA + ' dias');
+    }
+    if (st.config.metaEstudoMin > 0) {
+      var seqE = sequencia(function (rr) {
+        return rr && (rr.estudoMin || 0) >= st.config.metaEstudoMin;
+      });
+      if (seqE > 1) seqs.push('📚 Estudo ' + seqE + ' dias');
+    }
+    var seqT = sequencia(function (rr, dd) {
+      var prev = N.treinoDoDia(st, dd);
+      if (!prev) return true;
+      return rr && rr.treinos && rr.treinos.length > 0;
+    });
+    if (seqT > 1) seqs.push('🏋️ Treino ' + seqT + ' dias');
+    st.habitos.forEach(function (h) {
+      if (!h.ativo) return;
+      var seqH = sequencia(function (rr, dd) {
+        if ((h.dias || []).indexOf(dd.getDay()) === -1) return true;
+        return rr && rr.habitos && rr.habitos[h.id];
+      });
+      if (seqH > 1) seqs.push(esc(h.emoji || '✅') + ' ' + esc(h.nome) + ' ' + seqH + ' dias');
+    });
+    $('#historico-sequencias').innerHTML = seqs.length
+      ? seqs
+          .map(function (s) {
+            return (
+              '<span class="streak" style="display:inline-block;margin:2px 10px 2px 0">🔥 ' +
+              s +
+              '</span>'
+            );
+          })
+          .join('')
+      : '<p class="mini">Nenhuma sequência ativa ainda.</p>';
+  }
+
   /* ---------------- render geral ---------------- */
   function render() {
     renderTopo();
@@ -680,6 +822,7 @@
     renderTreino();
     renderEstudos();
     renderAgenda();
+    renderHistorico();
   }
 
   /* ---------------- ações ---------------- */
@@ -1976,7 +2119,7 @@
       }
 
       var h = (location.hash || '').replace('#', '');
-      if (['hoje', 'chat', 'treino', 'estudos', 'agenda'].indexOf(h) !== -1) irPara(h);
+      if (['hoje', 'chat', 'treino', 'estudos', 'agenda', 'historico'].indexOf(h) !== -1) irPara(h);
 
       setInterval(function () {
         if (S.hoje() !== diaCorrente) {

@@ -569,4 +569,14 @@ input[type=checkbox].toggle:focus-visible { outline: 2px solid var(--accent); ou
   }
   #lista-agenda .dia-cab { margin-top: 0; }
   #lista-agenda .vazio { grid-column: 1 / -1; }
+
+  /* Histórico: resumo e gráfico lado a lado, lista dia a dia ocupa a linha toda */
+  #vista-historico.ativa {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+    gap: 14px;
+  }
+  #vista-historico.ativa .cartao { margin-bottom: 0; }
+  #vista-historico.ativa .cartao:last-child { grid-column: 1 / -1; }
 }
