@@ -39,6 +39,44 @@
   function dataCurta(d) {
     return pad(d.getDate()) + '/' + pad(d.getMonth() + 1);
   }
+  /** @param {number|number[]} [padrao] */
+  function vibrar(padrao) {
+    if (navigator.vibrate) {
+      try {
+        navigator.vibrate(padrao || 15);
+      } catch (e) {
+        /* ignora — nem todo navegador suporta */
+      }
+    }
+  }
+
+  var CORES_CONFETE = ['var(--accent)', 'var(--accent-2)', '#ffd166', '#ef476f', '#06d6a0'];
+  function confete() {
+    for (var i = 0; i < 16; i++) {
+      var el = document.createElement('span');
+      el.className = 'confete-item';
+      el.style.left = Math.random() * 100 + 'vw';
+      el.style.background = CORES_CONFETE[i % CORES_CONFETE.length];
+      el.style.animationDelay = Math.random() * 0.25 + 's';
+      el.style.animationDuration = 0.9 + Math.random() * 0.5 + 's';
+      document.body.appendChild(el);
+      (function (e) {
+        setTimeout(function () {
+          e.remove();
+        }, 1600);
+      })(el);
+    }
+  }
+
+  // dispara vibração + confete só na transição pra 100% — não a cada clique
+  /** @param {number} antes */
+  function celebrarSeCompletou(antes) {
+    if (antes < 100 && scoreDia() === 100) {
+      vibrar([15, 60, 20]);
+      confete();
+    }
+  }
+
   function hojeD() {
     var d = new Date();
     d.setHours(12, 0, 0, 0);
@@ -191,13 +229,19 @@
   }
 
   // Conta dias consecutivos cumpridos. Se hoje ainda não foi cumprido,
-  // a sequência não quebra — começa a contagem por ontem.
+  // a sequência não quebra — começa a contagem por ontem. Um dia congelado
+  // manualmente ou dentro de uma pausa (modo férias) conta como cumprido
+  // mesmo sem registro real — é o que impede o streak de zerar por um
+  // imprevisto pontual ou uma viagem avisada.
+  function cumpriu(fn, d) {
+    return fn(st.registros[S.iso(d)], d) || S.diaProtegido(st, S.iso(d));
+  }
   function sequencia(fn) {
     var n = 0,
       d = hojeD();
-    if (!fn(st.registros[S.iso(d)], d)) d.setDate(d.getDate() - 1);
+    if (!cumpriu(fn, d)) d.setDate(d.getDate() - 1);
     for (var i = 0; i < 400; i++) {
-      if (!fn(st.registros[S.iso(d)], d)) break;
+      if (!cumpriu(fn, d)) break;
       n++;
       d.setDate(d.getDate() - 1);
     }
@@ -813,6 +857,124 @@
           })
           .join('')
       : '<p class="mini">Nenhuma sequência ativa ainda.</p>';
+
+    // congelamento de streak — pool mensal compartilhado entre todas as sequências
+    var mesAtual = S.hoje().slice(0, 7);
+    var disponiveis = S.congelamentosDisponiveis(st, mesAtual);
+    var hojeProtegido = st.diasProtegidos.indexOf(S.hoje()) !== -1;
+    $('#historico-congelamentos').textContent = hojeProtegido
+      ? '❄️ Hoje já está protegido'
+      : disponiveis +
+        ' de ' +
+        st.config.congelamentosPorMes +
+        ' congelamentos disponíveis este mês';
+    var btnProteger = $('#btn-proteger-dia');
+    btnProteger.disabled = hojeProtegido || disponiveis <= 0;
+    btnProteger.style.opacity = btnProteger.disabled ? '.5' : '';
+
+    renderHeatmap();
+    renderTendencias();
+  }
+
+  // mapa de contribuições estilo GitHub: uma coluna por semana, do domingo
+  // ao sábado, cobrindo os últimos ~12 meses até a semana atual.
+  function renderHeatmap() {
+    var hoje = hojeD();
+    var fimSemana = new Date(hoje.getTime());
+    fimSemana.setDate(fimSemana.getDate() + (6 - hoje.getDay()));
+    var inicio = new Date(fimSemana.getTime());
+    inicio.setDate(inicio.getDate() - 370);
+    inicio.setDate(inicio.getDate() - inicio.getDay());
+
+    var html = '';
+    var d = new Date(inicio.getTime());
+    while (d <= fimSemana) {
+      html += '<div class="heat-col">';
+      for (var dow = 0; dow < 7; dow++) {
+        if (d > hoje) {
+          html += '<span class="heat-dia vazio"></span>';
+        } else {
+          var s = scoreDoDia(d);
+          var nivel = s === null || s === 0 ? 0 : s >= 80 ? 4 : s >= 50 ? 3 : s >= 20 ? 2 : 1;
+          html +=
+            '<span class="heat-dia nivel-' +
+            nivel +
+            '" title="' +
+            dataCurta(d) +
+            ': ' +
+            (s === null ? 'sem dados' : s + '%') +
+            '"></span>';
+        }
+        d.setDate(d.getDate() + 1);
+      }
+      html += '</div>';
+    }
+    var alvo = $('#historico-heatmap');
+    alvo.innerHTML = html;
+    alvo.scrollLeft = alvo.scrollWidth;
+  }
+
+  function renderTendencias() {
+    var somaPorDia = [0, 0, 0, 0, 0, 0, 0],
+      nPorDia = [0, 0, 0, 0, 0, 0, 0];
+    for (var i = 0; i < 90; i++) {
+      var d = hojeD();
+      d.setDate(d.getDate() - i);
+      var s = scoreDoDia(d);
+      if (s !== null) {
+        somaPorDia[d.getDay()] += s;
+        nPorDia[d.getDay()]++;
+      }
+    }
+    var melhorDow = -1,
+      melhorMedia = -1;
+    for (var w = 0; w < 7; w++) {
+      if (!nPorDia[w]) continue;
+      var media = somaPorDia[w] / nPorDia[w];
+      if (media > melhorMedia) {
+        melhorMedia = media;
+        melhorDow = w;
+      }
+    }
+
+    var agora = hojeD();
+    var somaMes = 0,
+      nMes = 0;
+    for (var dia = 1; dia <= agora.getDate(); dia++) {
+      var dm = new Date(agora.getFullYear(), agora.getMonth(), dia, 12, 0, 0, 0);
+      var sm = scoreDoDia(dm);
+      if (sm !== null) {
+        somaMes += sm;
+        nMes++;
+      }
+    }
+    var taxaMes = nMes ? Math.round(somaMes / nMes) : null;
+
+    var itens = [];
+    if (melhorDow !== -1) {
+      itens.push(
+        '<div class="item"><span class="emoji">🏆</span><div class="info"><div class="nome">Melhor dia da semana</div>' +
+          '<div class="meta">' +
+          NLP.NOMES_DIA[melhorDow].charAt(0).toUpperCase() +
+          NLP.NOMES_DIA[melhorDow].slice(1) +
+          ' · média de ' +
+          Math.round(melhorMedia) +
+          '%</div></div></div>'
+      );
+    }
+    if (taxaMes !== null) {
+      itens.push(
+        '<div class="item"><span class="emoji">📅</span><div class="info"><div class="nome">Taxa de conclusão do mês</div>' +
+          '<div class="meta">' +
+          taxaMes +
+          '% de média em ' +
+          nMes +
+          ' dias registrados</div></div></div>'
+      );
+    }
+    $('#historico-tendencias').innerHTML = itens.length
+      ? itens.join('')
+      : '<p class="mini">Sem dados suficientes ainda.</p>';
   }
 
   /* ---------------- render geral ---------------- */
@@ -1458,7 +1620,10 @@
       $$('#modal input.carga').forEach(function (i) {
         cargas[i.dataset.ex] = i.value.trim();
       });
+      var antesTreino = scoreDia();
       registrarTreino(dv.id, cargas);
+      vibrar(15);
+      celebrarSeCompletou(antesTreino);
       fecharModal();
       brinde('Treino registrado 💪');
     };
@@ -1573,6 +1738,12 @@
   function modalConfig() {
     var c = st.config,
       p = st.perfil;
+    var hojeIso = S.hoje();
+    /** @type {{inicio: string, fim: string} | null} */
+    var pausaAtiva = null;
+    (st.pausas || []).forEach(function (pa) {
+      if (hojeIso >= pa.inicio && hojeIso <= pa.fim) pausaAtiva = pa;
+    });
     abrirModal(
       '<h3>Configurações</h3>' +
         '<label class="campo"><span>Seu nome</span><input type="text" id="c-nome" value="' +
@@ -1617,6 +1788,19 @@
         '>' +
         '<span style="margin:0">Notificações ligadas</span></label>' +
         '<button class="btn sec" id="c-testar">🔔 Testar notificação</button>' +
+        '<div class="sep"></div>' +
+        '<label class="campo"><span>🌴 Modo férias</span></label>' +
+        (pausaAtiva
+          ? '<p class="mini">Pausado até ' +
+            dataCurta(S.deISO(pausaAtiva.fim)) +
+            ' — lembretes não tocam e a sequência não quebra.</p>' +
+            '<button class="btn sec" id="c-cancelar-pausa">Cancelar pausa</button>'
+          : '<p class="mini">Pausa lembretes e protege sequências por alguns dias (viagem, doença).</p>' +
+            '<div class="linha-btn">' +
+            '<button class="btn sec" data-pausar="3">+3 dias</button>' +
+            '<button class="btn sec" data-pausar="7">+7 dias</button>' +
+            '<button class="btn sec" data-pausar="14">+14 dias</button>' +
+            '</div>') +
         '<div class="sep"></div>' +
         '<label class="campo"><span>Tema</span><select id="c-tema">' +
         '<option value="escuro"' +
@@ -1679,6 +1863,19 @@
     $('#c-arquivo').onchange = function (e) {
       importar(e.target.files[0]);
     };
+    if (pausaAtiva) {
+      $('#c-cancelar-pausa').onclick = function () {
+        cancelarPausa();
+        fecharModal();
+      };
+    } else {
+      $$('button[data-pausar]').forEach(function (b) {
+        b.onclick = function () {
+          pausar(+b.dataset.pausar);
+          fecharModal();
+        };
+      });
+    }
     $('#c-zerar').onclick = function () {
       if (!confirm('Apagar TODOS os dados do app? Isso não tem volta.')) return;
       st = S.estadoPadrao();
@@ -1715,6 +1912,50 @@
       }
     };
     fr.readAsText(arquivo);
+  }
+
+  /* ---------------- congelamento de streak / modo férias ---------------- */
+  function protegerHoje() {
+    var mes = S.hoje().slice(0, 7);
+    if (S.congelamentosDisponiveis(st, mes) <= 0) {
+      brinde('Sem congelamentos disponíveis este mês');
+      return;
+    }
+    var hojeIso = S.hoje();
+    if (st.diasProtegidos.indexOf(hojeIso) !== -1) {
+      brinde('Hoje já está protegido');
+      return;
+    }
+    st.diasProtegidos.push(hojeIso);
+    salvar();
+    vibrar(15);
+    brinde('❄️ Hoje protegido — sua sequência não quebra');
+  }
+
+  function pausar(dias) {
+    var inicio = S.hoje();
+    var fimD = hojeD();
+    fimD.setDate(fimD.getDate() + dias - 1);
+    st.pausas.push({ inicio: inicio, fim: S.iso(fimD) });
+    salvar();
+    brinde('Lembretes pausados até ' + dataCurta(fimD));
+  }
+
+  function cancelarPausa() {
+    var hojeIso = S.hoje();
+    var ontem = hojeD();
+    ontem.setDate(ontem.getDate() - 1);
+    var ontemIso = S.iso(ontem);
+    st.pausas = st.pausas
+      .map(function (p) {
+        if (hojeIso < p.inicio || hojeIso > p.fim) return p;
+        return { inicio: p.inicio, fim: ontemIso < p.inicio ? p.inicio : ontemIso };
+      })
+      .filter(function (p) {
+        return p.fim >= p.inicio;
+      });
+    salvar();
+    brinde('Pausa cancelada');
   }
 
   /* ---------------- tema ---------------- */
@@ -1935,6 +2176,7 @@
       irPara('estudos');
     };
     $('#btn-agua-config').onclick = modalConfig;
+    $('#btn-proteger-dia').onclick = protegerHoje;
 
     document.addEventListener('click', function (e) {
       var t = /** @type {HTMLElement} */ (e.target);
@@ -1951,7 +2193,10 @@
       var bAgua = alvo(t, '[data-agua]');
       if (bAgua) {
         var ml = +bAgua.dataset.agua;
+        var antesAgua = scoreDia();
         var tot = addAgua(ml);
+        if (ml > 0) vibrar(15);
+        celebrarSeCompletou(antesAgua);
         brinde(
           ml > 0 ? '+' + ml + ' ml · total ' + tot + ' ml' : 'Removido · total ' + tot + ' ml'
         );
@@ -1961,15 +2206,23 @@
       var bEst = alvo(t, '[data-estudo]');
       if (bEst) {
         var min = +bEst.dataset.estudo;
+        var antesEst = scoreDia();
         var totE = addEstudo(min);
+        if (min > 0) vibrar(15);
+        celebrarSeCompletou(antesEst);
         brinde((min > 0 ? '+' : '') + min + ' min · total ' + totE + ' min');
         return;
       }
 
       var bTog = alvo(t, '[data-toggle]');
       if (bTog) {
+        var antesTog = scoreDia();
         var res = toggleHabito(bTog.dataset.toggle);
-        if (res) brinde(res.on ? res.habito.nome + ' ✅' : res.habito.nome + ' desmarcado');
+        if (res) {
+          if (res.on) vibrar(15);
+          celebrarSeCompletou(antesTog);
+          brinde(res.on ? res.habito.nome + ' ✅' : res.habito.nome + ' desmarcado');
+        }
         return;
       }
 
@@ -2007,11 +2260,15 @@
 
       var bConc = alvo(t, '[data-concluir]');
       if (bConc) {
+        var antesConc = scoreDia();
         var rr = reg(bConc.dataset.d);
         var idx = rr.eventosFeitos.indexOf(bConc.dataset.concluir);
-        if (idx === -1) rr.eventosFeitos.push(bConc.dataset.concluir);
-        else rr.eventosFeitos.splice(idx, 1);
+        if (idx === -1) {
+          rr.eventosFeitos.push(bConc.dataset.concluir);
+          vibrar(15);
+        } else rr.eventosFeitos.splice(idx, 1);
         salvar();
+        celebrarSeCompletou(antesConc);
         return;
       }
 

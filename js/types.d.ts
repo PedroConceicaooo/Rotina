@@ -84,6 +84,7 @@ interface Config {
   tema: 'auto' | 'claro' | 'escuro';
   lembreteAgua: boolean;
   intervaloAguaMin: number;
+  congelamentosPorMes: number;
 }
 
 interface Estado {
@@ -99,6 +100,10 @@ interface Estado {
   chat: Array<{ papel: string; texto: string }>;
   /** chave do lembrete -> timestamp */
   notificado: Record<string, number>;
+  /** dias 'YYYY-MM-DD' protegidos manualmente (congelamento de streak) */
+  diasProtegidos: string[];
+  /** pausas de lembrete/streak (modo férias) */
+  pausas: Array<{ inicio: string; fim: string }>;
 }
 
 /** Um lembrete calculado por notify.js pra um dia específico. */
@@ -170,6 +175,10 @@ interface RotinaStoreApi {
   estadoPadrao(): Estado;
   registroDe(state: Estado, data?: string): RegistroDia;
   sanear(s: unknown): Estado;
+  emPausa(state: Estado, data: string): boolean;
+  diaProtegido(state: Estado, data: string): boolean;
+  congelamentosUsados(state: Estado, mes: string): number;
+  congelamentosDisponiveis(state: Estado, mes: string): number;
   pad(n: number): string;
   iso(d?: Date): string;
   hoje(): string;
@@ -193,6 +202,7 @@ interface RotinaNotifyApi {
   treinoDoDia(state: Estado, dia: Date): DivisaoTreino[] | null;
   ocorreEm(ev: Evento, dia: Date): Date | null;
   isoData(d: Date): string;
+  emPausa(state: Estado, dataStr: string): boolean;
 }
 
 interface RotinaNlpApi {

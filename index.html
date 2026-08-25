@@ -155,10 +155,23 @@
       <h2>📊 Visão geral</h2>
       <p class="mini centro" id="historico-media">—</p>
       <div id="historico-sequencias" style="margin-top:8px"></div>
+      <div class="sep"></div>
+      <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
+        <span class="mini" id="historico-congelamentos">—</span>
+        <button class="btn sec" id="btn-proteger-dia" style="width:auto;padding:8px 14px">❄️ Proteger hoje</button>
+      </div>
+    </div>
+    <div class="cartao largo">
+      <h2>🗓️ Mapa do ano</h2>
+      <div class="heatmap" id="historico-heatmap"></div>
     </div>
     <div class="cartao">
       <h2>Últimos 14 dias</h2>
       <div class="semana" id="historico-semana"></div>
+    </div>
+    <div class="cartao">
+      <h2>Tendências</h2>
+      <div id="historico-tendencias"></div>
     </div>
     <div class="cartao">
       <h2>Dia a dia (30 dias)</h2>

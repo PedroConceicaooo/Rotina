@@ -29,6 +29,12 @@
     x.setHours(0, 0, 0, 0);
     return x;
   }
+  /** modo férias: dia 'YYYY-MM-DD' cai dentro de alguma pausa cadastrada */
+  function emPausa(state, dataStr) {
+    return (state.pausas || []).some(function (p) {
+      return dataStr >= p.inicio && dataStr <= p.fim;
+    });
+  }
 
   /* ---------- ocorrências de um evento em um dia ---------- */
   /**
@@ -94,6 +100,7 @@
     var out = [];
     var cfg = state.config;
     var dataStr = isoData(dia);
+    if (emPausa(state, dataStr)) return out;
     var reg = (state.registros || {})[dataStr] || {
       habitos: {},
       agua: 0,
@@ -273,6 +280,7 @@
     treinoDoDia: treinoDoDia,
     ocorreEm: ocorreEm,
     isoData: isoData,
-    comHora: comHora
+    comHora: comHora,
+    emPausa: emPausa
   };
 })(typeof self !== 'undefined' ? self : this);

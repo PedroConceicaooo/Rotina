@@ -417,6 +417,16 @@ input[type=checkbox].toggle:focus-visible { outline: 2px solid var(--accent); ou
 .semana .haste.ok { background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
 .semana .rot { font-size: 10.5px; color: var(--muted-2); }
 
+/* ---------- mapa de calor anual ---------- */
+.heatmap { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 6px; }
+.heat-col { display: flex; flex-direction: column; gap: 3px; flex: 0 0 auto; }
+.heat-dia { width: 11px; height: 11px; border-radius: 3px; background: var(--surface-3); display: block; }
+.heat-dia.vazio { background: transparent; }
+.heat-dia.nivel-1 { background: color-mix(in srgb, var(--accent) 28%, var(--surface-3)); }
+.heat-dia.nivel-2 { background: color-mix(in srgb, var(--accent) 55%, var(--surface-3)); }
+.heat-dia.nivel-3 { background: color-mix(in srgb, var(--accent) 80%, var(--surface-3)); }
+.heat-dia.nivel-4 { background: var(--accent); }
+
 /* ---------- agenda ---------- */
 .dia-cab {
   font-size: 12px; font-weight: 650; letter-spacing: .4px;
@@ -502,6 +512,21 @@ input[type=checkbox].toggle:focus-visible { outline: 2px solid var(--accent); ou
 .brinde.on { opacity: 1; transform: translateX(-50%) translateY(-4px); }
 
 .streak { font-size: 12px; color: var(--warn); font-weight: 600; }
+
+/* ---------- confete de celebração ---------- */
+.confete-item {
+  position: fixed;
+  top: -12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  z-index: 90;
+  pointer-events: none;
+  animation: cair-confete 1.1s ease-in forwards;
+}
+@keyframes cair-confete {
+  to { transform: translateY(100vh) rotate(540deg); opacity: 0; }
+}
 .mini { font-size: 12px; color: var(--muted); }
 .sep { height: 1px; background: var(--line); margin: 14px 0; }
 .centro { text-align: center; }
@@ -578,5 +603,6 @@ input[type=checkbox].toggle:focus-visible { outline: 2px solid var(--accent); ou
     gap: 14px;
   }
   #vista-historico.ativa .cartao { margin-bottom: 0; }
+  #vista-historico.ativa .cartao.largo,
   #vista-historico.ativa .cartao:last-child { grid-column: 1 / -1; }
 }

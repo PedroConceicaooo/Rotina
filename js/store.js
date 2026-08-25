@@ -127,7 +127,8 @@
         alertaEventoMin: 30,
         tema: 'auto',
         lembreteAgua: true,
-        intervaloAguaMin: 120
+        intervaloAguaMin: 120,
+        congelamentosPorMes: 2
       },
       habitos: [
         {
@@ -219,7 +220,11 @@
       eventos: [],
       registros: {},
       chat: [],
-      notificado: {}
+      notificado: {},
+      // dias 'YYYY-MM-DD' protegidos manualmente (congelamento de streak)
+      diasProtegidos: [],
+      // pausas de lembrete/streak (modo férias): [{ inicio: 'YYYY-MM-DD', fim: 'YYYY-MM-DD' }]
+      pausas: []
     };
   }
 
@@ -267,7 +272,36 @@
     if (!s.registros || typeof s.registros !== 'object') s.registros = {};
     if (!Array.isArray(s.chat)) s.chat = [];
     if (!s.notificado || typeof s.notificado !== 'object') s.notificado = {};
+    if (!Array.isArray(s.diasProtegidos)) s.diasProtegidos = [];
+    if (!Array.isArray(s.pausas)) s.pausas = [];
     return s;
+  }
+
+  /* ---------- congelamento de streak / modo férias ---------- */
+  /** @param {Estado} state @param {string} data 'YYYY-MM-DD' @returns {boolean} */
+  function emPausa(state, data) {
+    return (state.pausas || []).some(function (p) {
+      return data >= p.inicio && data <= p.fim;
+    });
+  }
+
+  /** dia conta como cumprido pra fins de streak mesmo sem registro real */
+  /** @param {Estado} state @param {string} data 'YYYY-MM-DD' @returns {boolean} */
+  function diaProtegido(state, data) {
+    return (state.diasProtegidos || []).indexOf(data) !== -1 || emPausa(state, data);
+  }
+
+  /** @param {Estado} state @param {string} mes 'YYYY-MM' @returns {number} */
+  function congelamentosUsados(state, mes) {
+    return (state.diasProtegidos || []).filter(function (d) {
+      return d.indexOf(mes) === 0;
+    }).length;
+  }
+
+  /** @param {Estado} state @param {string} mes 'YYYY-MM' @returns {number} */
+  function congelamentosDisponiveis(state, mes) {
+    var total = (state.config && state.config.congelamentosPorMes) || 0;
+    return Math.max(0, total - congelamentosUsados(state, mes));
   }
 
   /* ---------- API pública ---------- */
@@ -315,6 +349,10 @@
     estadoPadrao: estadoPadrao,
     registroDe: registroDe,
     sanear: sanear,
+    emPausa: emPausa,
+    diaProtegido: diaProtegido,
+    congelamentosUsados: congelamentosUsados,
+    congelamentosDisponiveis: congelamentosDisponiveis,
     // helpers exportados
     pad: pad,
     iso: iso,
